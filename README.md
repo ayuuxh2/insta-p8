@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react" alt="React" />
   <img src="https://img.shields.io/badge/Supabase-Postgres-3ECF8E?style=for-the-badge&logo=supabase" alt="Supabase" />
   <img src="https://img.shields.io/badge/Instagram-Automation-E4405F?style=for-the-badge&logo=instagram" alt="Instagram automation" />
+  <a href="https://discord.gg/7J9E7bNvX"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
 <h1 align="center">⚡ InstaAuto</h1>
@@ -23,7 +24,8 @@
   <a href="#-quick-start-self-host"><strong>Self Host</strong></a> ·
   <a href="#-features"><strong>Features</strong></a> ·
   <a href="#-environment-variables"><strong>Env Setup</strong></a> ·
-  <a href="#-deploy-to-vercel"><strong>Deploy</strong></a>
+  <a href="#-deploy-to-vercel"><strong>Deploy</strong></a> ·
+  <a href="https://discord.gg/7J9E7bNvX"><strong>Discord</strong></a>
 </p>
 
 ---
@@ -417,6 +419,8 @@ InstaAuto can be used as:
 ## 🤝 Contributing
 
 Contributions are welcome.
+
+Join our **[Discord community](https://discord.gg/7J9E7bNvX)** for discussions, support, and updates!
 
 Good first issues:
 
