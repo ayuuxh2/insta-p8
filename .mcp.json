@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "serverUrl": "https://mcp.supabase.com/mcp?project_ref=xmllcdomcmydtqqvoobg"
+    }
+  }
+}
