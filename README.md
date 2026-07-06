@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#-step-by-step-video-setup-guide"><strong>🎬 Video Guide</strong></a> ·
   <a href="#-live-web-app--testing-access"><strong>Join Web Testers</strong></a> ·
   <a href="#-quick-start-self-host"><strong>Self Host</strong></a> ·
   <a href="#-features"><strong>Features</strong></a> ·
@@ -30,6 +31,22 @@
   <a href="https://www.producthunt.com/products/instaauto?launch=instaauto"><strong>Product Hunt</strong></a> ·
   <a href="https://discord.gg/7J9E7bNvX"><strong>Discord</strong></a> ·
   <a href="https://t.me/instagramautomationp8"><strong>Telegram</strong></a>
+</p>
+
+---
+
+## 🎬 Step-by-Step Video Setup Guide
+
+Get your self-hosted Instagram automation platform live in under 18 minutes! Follow this step-by-step video tutorial to fork, configure, and deploy the application.
+
+<p align="center">
+  <a href="https://youtu.be/kIMQe__d37I" target="_blank">
+    <img src="https://img.youtube.com/vi/kIMQe__d37I/0.jpg" alt="InstaAuto Setup Tutorial Video" width="600" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  </a>
+</p>
+
+<p align="center">
+  👉 <strong><a href="https://youtu.be/kIMQe__d37I" target="_blank">Click here to watch the full step-by-step tutorial on YouTube</a></strong>
 </p>
 
 ---
@@ -416,7 +433,7 @@ InstaAuto can be used as:
 - [ ] Better analytics charts
 - [ ] Webhook event debugger
 - [ ] Export/import automations
-- [ ] Public demo video
+- [x] Public demo video
 
 ---
 
