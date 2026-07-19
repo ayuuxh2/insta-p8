@@ -12,7 +12,7 @@
 <h1 align="center">⚡ InstaAuto</h1>
 
 <p align="center">
-  <strong>Open-source Instagram automation for DMs, comments, stories, AI replies, inbox, and Reels scheduling.</strong>
+  <strong>Open-source Instagram automation for DMs, comments, stories, AI replies, and inbox.</strong>
 </p>
 
 <p align="center">
@@ -64,7 +64,6 @@ Use it to build:
 - **Keyword-triggered message funnels**
 - **Live Instagram inbox dashboard**
 - **Instagram Ice Breakers**
-- **Reels publishing and scheduling workflows**
 - **Self-hosted ManyChat alternative**
 - **Open-source Instagram chatbot**
 
@@ -193,15 +192,6 @@ ManyChat is great, but it is closed-source and paid. InstaAuto is for people who
 - Store incoming and outgoing Instagram messages
 - Useful for creators who want automation plus manual support
 
-### 🎬 Reels Publishing & Scheduling
-
-- Create Instagram Reels containers
-- Poll publishing status
-- Publish ready containers
-- Content pool for scheduled posts
-- Upload/import video URLs into Supabase storage
-- Scheduler configuration API
-
 ### 📊 Dashboard
 
 - Automation count
@@ -253,12 +243,9 @@ app/api/automations              Automation CRUD
 app/api/ice-breakers             Ice Breaker management + sync
 app/api/inbox                    Conversations, messages, manual send
 app/api/groq                     AI auto-reply settings + chat proxy
-app/api/hooks                    Reels publishing hooks
-app/api/scheduler                Reels/content scheduling
-components/dashboard             Dashboard, automations, content pool
+components/dashboard             Dashboard and automations UI
 components/inbox                 Live inbox UI
 lib/supabase-server.ts           Supabase server client
-lib/instagram-publishing.ts      Reels container/publish helpers
 ```
 
 ---
@@ -298,8 +285,6 @@ Required Instagram scopes used by the app:
 instagram_business_basic
 instagram_business_manage_messages
 instagram_business_manage_comments
-instagram_business_content_publish
-instagram_business_manage_insights
 ```
 
 ### 5. Configure environment variables
@@ -385,7 +370,6 @@ Before going live, test these flows:
 - Add Ice Breakers and verify they sync
 - Toggle AI auto-reply and send an unmatched DM
 - Test inbox manual reply
-- Test Reels container creation if using publisher
 
 ---
 
@@ -406,7 +390,6 @@ InstaAuto can be used as:
 - Instagram marketing automation dashboard
 - Creator automation CRM
 - Instagram inbox automation
-- Instagram Reels scheduler
 - Open-source Instagram API starter
 
 ---

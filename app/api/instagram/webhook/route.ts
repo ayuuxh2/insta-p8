@@ -1,5 +1,6 @@
 /* @ts-nocheck */
 
+import crypto from "crypto"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import {
@@ -13,7 +14,24 @@ import {
   sleep,
 } from "@/lib/instagram-api"
 
-const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || "your_verify_token"
+const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
+// Meta signs every webhook POST with HMAC-SHA256 of the raw body. Depending on app setup the
+// signing key is the Instagram app secret or the parent Meta app secret, so accept either.
+const APP_SECRETS = [process.env.INSTAGRAM_APP_SECRET, process.env.META_APP_SECRET].filter(
+  (s): s is string => Boolean(s),
+)
+
+function isValidSignature(rawBody: string, signatureHeader: string | null): boolean {
+  if (APP_SECRETS.length === 0 || !signatureHeader?.startsWith("sha256=")) return false
+  const received = signatureHeader.slice("sha256=".length)
+  return APP_SECRETS.some((secret) => {
+    const expected = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex")
+    return (
+      received.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(received, "utf8"), Buffer.from(expected, "utf8"))
+    )
+  })
+}
 
 const DEFAULT_PUBLIC_REPLIES = ["Check your DMs! 📥", "Sent! 🔥", "Check inbox! ✨"]
 
@@ -23,7 +41,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token")
   const challenge = searchParams.get("hub.challenge")
 
-  if (mode === "subscribe" && token === WEBHOOK_VERIFY_TOKEN && challenge) {
+  if (mode === "subscribe" && WEBHOOK_VERIFY_TOKEN && token === WEBHOOK_VERIFY_TOKEN && challenge) {
     return new NextResponse(challenge, { status: 200 })
   }
   return NextResponse.json({ error: "Invalid token" }, { status: 403 })
@@ -111,7 +129,11 @@ function responsePreviewText(content: any): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const rawBody = await request.text()
+    if (!isValidSignature(rawBody, request.headers.get("x-hub-signature-256"))) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    }
+    const body = JSON.parse(rawBody)
     if (!body.entry) return NextResponse.json({ ok: true })
     const supabase = await getSupabaseServerClient()
 

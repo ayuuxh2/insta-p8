@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   Zap, MessageCircle, Sparkles, ArrowUpRight, Github, Star,
-  Send, AtSign, Clapperboard, Brain, Inbox, Lock, Terminal,
+  Send, AtSign, Brain, Inbox, Lock, Terminal,
   Loader2,
 } from "lucide-react"
 
@@ -23,12 +23,9 @@ export function LandingPage() {
   }, [])
 
   const handleLogin = () => {
-    // Instagram Login with Facebook (Graph API) — the correct OAuth endpoint for
-    // Instagram Business / Creator accounts with business-level scopes.
-    // www.instagram.com/oauth/authorize is NOT a valid endpoint; it returns a
-    // "page not available" error because www.instagram.com does not serve /oauth/authorize.
-    // Meta's docs: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
-    window.location.href = `https://www.facebook.com/v24.0/dialog/oauth?client_id=${process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID}&redirect_uri=${process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI}&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments%2Cinstagram_business_content_publish%2Cinstagram_business_manage_insights`
+    // Instagram Business Login (Instagram API with Instagram Login). client_id must be the
+    // Instagram app ID from the Instagram product page, not the parent Meta app ID.
+    window.location.href = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID}&redirect_uri=${process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI}&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments`
   }
 
   const handleTestLogin = () => {
@@ -143,7 +140,7 @@ export function LandingPage() {
           <div className="marquee-track flex whitespace-nowrap font-mono-ui text-xs uppercase tracking-[0.2em] text-neutral-600 gap-8 w-max">
             {Array.from({ length: 2 }).map((_, copy) => (
               <div key={copy} className="flex gap-8">
-                {["comment → DM", "keyword triggers", "story reactions", "AI auto-reply", "live inbox", "ice breakers", "reels scheduler", "follow gate", "quick replies", "media attachments", "public + private replies"].map((t) => (
+                {["comment → DM", "keyword triggers", "story reactions", "AI auto-reply", "live inbox", "ice breakers", "follow gate", "quick replies", "media attachments", "public + private replies"].map((t) => (
                   <span key={t} className="flex items-center gap-8">
                     {t} <span className="text-[#ffe14d]">✦</span>
                   </span>
@@ -171,8 +168,6 @@ export function LandingPage() {
               desc="Feed it your account context — niche, products, tone — and let AI handle unmatched DMs like a human." />
             <Feature icon={<Inbox className="w-4 h-4" />} title="Live inbox"
               desc="Every conversation in one dashboard. Jump in manually anytime, fire quick responses from your saved automations." />
-            <Feature icon={<Clapperboard className="w-4 h-4" />} title="Reels scheduler"
-              desc="Content pool + interval publishing. Upload once, drip-post on your schedule with auto-attached automations." />
             <Feature icon={<Lock className="w-4 h-4" />} title="Follow gate"
               desc="Lock content behind a follow. Non-followers get a follow prompt; one tap later they unlock the goods." />
             <Feature icon={<Sparkles className="w-4 h-4" />} title="Human-like sending"
