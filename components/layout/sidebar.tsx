@@ -19,12 +19,13 @@ const NAV = [
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   username?: string
+  profilePic?: string | null
   className?: string
   onLogout?: () => void
   onNavigate?: () => void
 }
 
-export function Sidebar({ className, username = "creator", onLogout, onNavigate, ...props }: SidebarProps) {
+export function Sidebar({ className, username = "creator", profilePic, onLogout, onNavigate, ...props }: SidebarProps) {
   const pathname = usePathname()
 
   return (
@@ -96,8 +97,13 @@ export function Sidebar({ className, username = "creator", onLogout, onNavigate,
       <div className="px-3 pb-4">
         <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-white/[0.06] group">
           <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-500 p-[1.5px] shrink-0">
-            <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
-              <span className="text-[10px] font-bold text-white">{username.charAt(0).toUpperCase()}</span>
+            <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
+              {profilePic ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profilePic} alt={username} className="w-full h-full rounded-full object-cover" />
+              ) : (
+                <span className="text-[10px] font-bold text-white">{username.charAt(0).toUpperCase()}</span>
+              )}
             </div>
           </div>
           <div className="flex-1 min-w-0">

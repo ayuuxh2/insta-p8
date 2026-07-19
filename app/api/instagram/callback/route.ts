@@ -76,15 +76,17 @@ export async function POST(request: NextRequest) {
     // https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/get-started
     let username = `user_${loginUserId}`
     let businessAccountId = loginUserId // fallback
+    let profilePic: string | null = null
 
     try {
       const meRes = await fetch(
-        `https://graph.instagram.com/v24.0/me?fields=user_id,username&access_token=${accessToken}`
+        `https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`
       )
       const meData = await meRes.json()
       console.log("[v0] 📋 /me response:", JSON.stringify(meData))
 
       if (meData.username) username = meData.username
+      if (meData.profile_picture_url) profilePic = meData.profile_picture_url
       if (meData.user_id) {
         businessAccountId = meData.user_id.toString()
         console.log(`[v0] 🎯 Got IG Professional Account ID (user_id): ${businessAccountId}`)
@@ -115,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     if (upsertError) throw upsertError
 
-    const response = NextResponse.json({ success: true, username, userId: loginUserId })
+    const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
     response.cookies.set("insta_session", JSON.stringify({ username, userId: loginUserId }), {
       path: "/",
       maxAge: expiresIn,
