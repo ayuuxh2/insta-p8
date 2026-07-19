@@ -6,7 +6,7 @@ export default function PrivacyPage() {
 
       <section className="space-y-4">
         <p>
-          This app (&quot;Insta P8&quot;) uses the Instagram Graph API to help users manage
+          This app (&quot;Insta P8&quot;) is owned and operated by <strong>ayuuxh labs</strong>. The app uses the Instagram Graph API to help users manage
           their Instagram account, including posting reels, auto-replying to
           messages, and viewing analytics.
         </p>
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
 
         <h2 className="text-xl font-semibold mt-6">Contact</h2>
         <p>
-          For any questions, please reach out via the app dashboard.
+          For any questions, please reach out via the app dashboard or email at flexhunt1@gmail.com.
         </p>
       </section>
     </div>
