@@ -130,7 +130,12 @@ function responsePreviewText(content: any): string {
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text()
-    if (!isValidSignature(rawBody, request.headers.get("x-hub-signature-256"))) {
+    const signature = request.headers.get("x-hub-signature-256")
+    if (!isValidSignature(rawBody, signature)) {
+      console.error(
+        `[webhook] 401: ${!signature ? "no x-hub-signature-256 header" : "signature mismatch"}; ` +
+          `secrets configured: ${APP_SECRETS.length} (INSTAGRAM_APP_SECRET${process.env.META_APP_SECRET ? " + META_APP_SECRET" : " only"})`,
+      )
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
     }
     const body = JSON.parse(rawBody)
