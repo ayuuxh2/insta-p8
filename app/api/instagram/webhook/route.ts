@@ -132,11 +132,20 @@ export async function POST(request: NextRequest) {
     const rawBody = await request.text()
     const signature = request.headers.get("x-hub-signature-256")
     if (!isValidSignature(rawBody, signature)) {
+      // Hash prefixes are safe to log and let us tell a wrong secret from a mutated body.
+      const computed = APP_SECRETS.map(
+        (s, i) =>
+          `${i === 0 ? "IG" : "META"}:${crypto.createHmac("sha256", s).update(rawBody, "utf8").digest("hex").slice(0, 12)}`,
+      ).join(" ")
       console.error(
         `[webhook] 401: ${!signature ? "no x-hub-signature-256 header" : "signature mismatch"}; ` +
-          `secrets configured: ${APP_SECRETS.length} (INSTAGRAM_APP_SECRET${process.env.META_APP_SECRET ? " + META_APP_SECRET" : " only"})`,
+          `secrets configured: ${APP_SECRETS.length}; received=${signature?.slice(7, 19) ?? "-"} computed=[${computed}] bodyLen=${rawBody.length}`,
       )
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+      if (process.env.DISABLE_WEBHOOK_SIGNATURE_CHECK === "true") {
+        console.warn("[webhook] SIGNATURE CHECK BYPASSED — remove DISABLE_WEBHOOK_SIGNATURE_CHECK after debugging")
+      } else {
+        return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+      }
     }
     const body = JSON.parse(rawBody)
     if (!body.entry) return NextResponse.json({ ok: true })
