@@ -12,11 +12,11 @@
 <h1 align="center">⚡ InstaAuto</h1>
 
 <p align="center">
-  <strong>Open-source Instagram automation for DMs, comments, stories, AI replies, and inbox.</strong>
+  <strong>Free open-source ManyChat alternative — Instagram DM automation, comment-to-DM funnels, story replies, AI auto-replies, and a live inbox.</strong>
 </p>
 
 <p align="center">
-  A self-hosted, AI-ready, developer-friendly alternative to paid Instagram automation tools like ManyChat.
+  A self-hosted, AI-ready, developer-friendly alternative to paid Instagram automation tools like ManyChat, Chatfuel, and SendPulse.
   <br />
   No monthly SaaS fees. No vendor lock-in. Your data stays in your Supabase.
 </p>
@@ -28,6 +28,7 @@
   <a href="#-features"><strong>Features</strong></a> ·
   <a href="#-environment-variables"><strong>Env Setup</strong></a> ·
   <a href="#-deploy-to-vercel"><strong>Deploy</strong></a> ·
+  <a href="#-faq"><strong>FAQ</strong></a> ·
   <a href="https://www.producthunt.com/products/instaauto?launch=instaauto"><strong>Product Hunt</strong></a> ·
   <a href="https://discord.gg/7J9E7bNvX"><strong>Discord</strong></a> ·
   <a href="https://t.me/instagramautomationp8"><strong>Telegram</strong></a>
@@ -100,13 +101,12 @@ If you are a developer or agency, self-host InstaAuto on your own Vercel + Supab
 Try a real Instagram automation demo before self-hosting.
 
 - **Instagram profile:** [@ayuuxh2](https://www.instagram.com/ayuuxh2/)
-- **Ice Breaker demo:** start a DM and tap/send `hello` → bot replies `heyyy`
-- **DM keyword demo:** send `hi` → bot replies `heyy`
-- **DM keyword demo:** send `link` → bot replies `hello`
-- **Comment-to-DM demo post:** [instagram.com/p/DTkUbO3EZqC](https://www.instagram.com/p/DTkUbO3EZqC/)
-- **Comment trigger:** comment `hiii` on the demo post to test comment-to-DM automation
+- **DM keyword demo:** send `hello` in DMs → bot replies with a welcome message
+- **Comment-to-DM demo:** comment `link` on the demo post → bot public-replies and DMs you the link
+- **Comment-to-DM demo post:** [instagram.com/p/DWb3vuZDxm6](https://www.instagram.com/p/DWb3vuZDxm6/)
+- **Story reply demo:** reply `info` to an active story → bot DMs you back
 
-This showcase helps contributors and testers verify that the open-source Instagram DM automation, Ice Breakers, keyword replies, and comment-to-DM workflow are working in production.
+This showcase helps contributors and testers verify that the open-source Instagram DM automation, comment-to-DM funnels, and story-reply workflow are working in production.
 
 > Please use the demo responsibly. Do not spam the showcase profile or post.
 
@@ -373,12 +373,41 @@ Before going live, test these flows:
 
 ---
 
+## ❓ FAQ
+
+### Is there a free alternative to ManyChat for Instagram?
+
+Yes — InstaAuto is a free, open-source ManyChat alternative. You self-host it on Vercel and Supabase free tiers, connect your Instagram Business or Creator account through the official Instagram API, and get DM keyword automation, comment-to-DM funnels, story-reply automation, and a live inbox without any monthly fee.
+
+### How do I automate Instagram DMs for free?
+
+Deploy InstaAuto (about 18 minutes with the [video guide](https://youtu.be/kIMQe__d37I)), connect your Instagram professional account, and create a keyword rule — for example, auto-reply to every DM containing "price". Replies can be text, images, quick-reply chips, or button cards.
+
+### How does comment-to-DM automation work?
+
+When someone comments a trigger word (like "link") on your post, Instagram sends a webhook to your deployment. InstaAuto posts a public reply ("Check your DMs!") and sends the commenter a private DM with your link or lead magnet — the same funnel ManyChat charges for.
+
+### Is this allowed by Instagram?
+
+Yes — InstaAuto uses the official Instagram API with Instagram Login and its approved permissions. Every reply is triggered by a user-initiated message or comment, within Instagram's messaging window rules. It does not scrape, mass-DM, or bypass rate limits.
+
+### Do I need a server?
+
+No dedicated server — it runs on Vercel serverless functions with a Supabase Postgres database. Both have free tiers that comfortably handle a creator account.
+
+### ManyChat vs Chatfuel vs InstaAuto?
+
+ManyChat and Chatfuel are excellent hosted products with polished UIs and paid plans. InstaAuto trades the polish for ownership: full source code, your own database, unlimited customization, and $0/month.
+
+---
+
 ## 📈 SEO Use Cases
 
 InstaAuto can be used as:
 
 - Free ManyChat alternative
 - Open-source ManyChat alternative
+- Free Chatfuel alternative for Instagram
 - Instagram DM automation tool
 - Instagram comment automation tool
 - Instagram chatbot platform
