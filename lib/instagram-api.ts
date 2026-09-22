@@ -35,7 +35,14 @@ async function post(path: string, token: string, body: any): Promise<SendResult>
     })
     const json = await res.json()
     if (!res.ok || json.error) {
-      console.error(`[ig-api] ${path} failed:`, JSON.stringify(json.error))
+      // Safe diagnostics: status + Meta's own error fields. Never the access token.
+      const meta = json?.error
+      console.error(
+        `[ig-api] ${path} failed: HTTP ${res.status}` +
+          (meta
+            ? ` type=${meta.type ?? "-"} code=${meta.code ?? "-"} subcode=${meta.error_subcode ?? "-"} message=${meta.message ?? "-"}`
+            : ""),
+      )
       return { ok: false, error: json.error || `HTTP ${res.status}` }
     }
     return { ok: true, id: json.id || json.message_id }

@@ -37,6 +37,7 @@ async function test(matched, profileFails = false) {
       sendSenderAction: async () => ({ ok: true }),
     },
     '@/lib/ai-reply': {}, '@/lib/unlock-tracking': { unlockKey: () => 'key' },
+    '@/lib/webhook-verify': { handleWebhookVerification: () => ({}), isMetaWebhookDelivery: () => false },
   }
   process.env.INSTAGRAM_APP_SECRET = 'test-secret'
   const module = { exports: {} }

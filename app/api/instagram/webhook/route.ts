@@ -19,6 +19,11 @@ import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
 import { handleWebhookVerification } from "@/lib/webhook-verify"
 
+// Reply delivery can legitimately sleep (human-like delays), call the AI provider
+// (15s timeout) and then hit the Graph API. Vercel's default function limit is
+// shorter than that, so a timed-out invocation could drop a reply mid-send.
+export const maxDuration = 60
+
 // Meta signs every webhook POST with HMAC-SHA256 of the raw body. Depending on app setup the
 // signing key is the Instagram app secret or the parent Meta app secret, so accept either.
 const APP_SECRETS = [process.env.INSTAGRAM_APP_SECRET, process.env.META_APP_SECRET].filter(
@@ -170,6 +175,56 @@ async function verifyFollowStatus(igScopedId: string, pageAccessToken: string): 
 // Unlock-attempt counter is in lib/unlock-tracking.ts -- uses Supabase
 // unlock_attempts table so the 3-attempt cap works across Vercel instances.
 
+// ============================================================
+// Audit trail -- sanitized webhook receipt summary
+// Stores event kinds and IG IDs only. Never stores tokens, signatures,
+// headers, or message bodies.
+// ============================================================
+function describeMessagingEvent(event: any): string {
+  if (event?.message?.is_echo) return "echo"
+  if (event?.read) return "read"
+  if (event?.delivery) return "delivery"
+  if (event?.reaction) return "reaction"
+  if (event?.message?.quick_reply) return "quick_reply"
+  if (event?.postback) return "postback"
+  if (event?.message?.attachments?.[0]?.type === "story_mention") return "story_mention"
+  if (event?.message?.reply_to?.story) return "story_reply"
+  if (event?.message) return "message"
+  return "unknown"
+}
+
+function recordWebhookEvent(supabase: any, body: any) {
+  try {
+    const entries: any[] = Array.isArray(body?.entry) ? body.entry : []
+    const events = entries.flatMap((entry: any) =>
+      (Array.isArray(entry?.messaging) ? entry.messaging : []).map((event: any) => ({
+        sender: event?.sender?.id != null ? String(event.sender.id) : null,
+        recipient: event?.recipient?.id != null ? String(event.recipient.id) : null,
+        kind: describeMessagingEvent(event),
+        mid: event?.message?.mid != null ? String(event.message.mid) : null,
+      })),
+    )
+    const comments = entries.flatMap((entry: any) =>
+      (Array.isArray(entry?.changes) ? entry.changes : []).map((change: any) => ({
+        field: change?.field ?? "unknown",
+        hasText: Boolean(change?.value?.text),
+      })),
+    )
+    supabase
+      .from("webhook_events")
+      .insert({
+        event_type: typeof body?.object === "string" ? body.object : "instagram",
+        data: { entryCount: entries.length, events, comments },
+      })
+      .then(
+        () => {},
+        (e: any) => console.warn("[webhook] audit insert failed:", e?.message),
+      )
+  } catch (e: any) {
+    console.warn("[webhook] audit failed:", e?.message)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text()
@@ -192,9 +247,17 @@ export async function POST(request: NextRequest) {
     }
     const body = JSON.parse(rawBody)
     if (!body.entry) return NextResponse.json({ ok: true })
+    console.log(
+      `[webhook] received object=${typeof body.object === "string" ? body.object : "-"} entries=${Array.isArray(body.entry) ? body.entry.length : 0}`,
+    )
     // Ensure schema is up-to-date on every cold start (idempotent, no-op if all tables exist)
     ensureSchema().catch((e) => console.warn("[webhook] ensureSchema failed:", e?.message))
     const supabase = await getSupabaseServerClient()
+
+    // Secret-free receipt trail. public.webhook_events existed in the schema but
+    // was never written to, so "did Meta actually reach us?" was unanswerable
+    // from the database. Fire-and-forget: auditing must never block delivery.
+    void recordWebhookEvent(supabase, body)
 
     for (const entry of body.entry) {
       // Skip pure system events (echo / read / delivery)

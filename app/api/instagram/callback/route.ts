@@ -1,6 +1,9 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
-import { handleWebhookVerification } from "@/lib/webhook-verify"
+import { handleWebhookVerification, isMetaWebhookDelivery } from "@/lib/webhook-verify"
+// Reuse the real Instagram webhook processor. Importing the route module keeps a
+// single source of truth for event handling instead of duplicating it here.
+import { POST as handleMetaWebhookDelivery } from "../webhook/route"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -9,7 +12,8 @@ export async function GET(request: NextRequest) {
   // The canonical webhook endpoint is /api/instagram/webhook — that is where Meta
   // should deliver events. This branch exists so the OAuth callback also answers the
   // verification handshake, keeping webhook setup working for anyone who pointed the
-  // Meta "Callback URL" at this route instead. Actual webhook POSTs never land here.
+  // Meta "Callback URL" at this route instead. Event POSTs are also handled here (see
+  // POST below) and delegated to the webhook processor.
   if (searchParams.has("hub.mode")) {
     return handleWebhookVerification(searchParams)
   }
@@ -34,8 +38,38 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { code } = body
+    const rawBody = await request.text()
+    const signature = request.headers.get("x-hub-signature-256")
+
+    // Meta delivers webhook event POSTs to whatever URL is registered as the
+    // Instagram webhook "Callback URL" in the App Dashboard. When that still
+    // points at this OAuth callback (the production 400 in the logs), incoming
+    // DMs land here and used to fall through to the `{ code }` branch below,
+    // failing with {"error":"No code"} and never reaching an automation.
+    // A verified Meta delivery is handed to the same processor
+    // /api/instagram/webhook uses, so replies work regardless of which URL the
+    // dashboard advertises (the dashboard should still be pointed at
+    // /api/instagram/webhook).
+    if (isMetaWebhookDelivery(rawBody, signature)) {
+      console.log(
+        "[callback] Meta webhook delivery detected - delegating to the Instagram webhook processor",
+      )
+      return handleMetaWebhookDelivery(
+        new NextRequest(request.url, {
+          method: "POST",
+          headers: request.headers,
+          body: rawBody,
+        }),
+      )
+    }
+
+    let body: any
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json({ error: "No code" }, { status: 400 })
+    }
+    const code = body?.code
     if (!code) return NextResponse.json({ error: "No code" }, { status: 400 })
 
     // 1. Env Vars

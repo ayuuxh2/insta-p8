@@ -27,3 +27,24 @@ export function handleWebhookVerification(searchParams: URLSearchParams): NextRe
 
   return NextResponse.json({ error: "Invalid verify token" }, { status: 403 })
 }
+
+/**
+ * True when a POST body is a Meta webhook *delivery* rather than an OAuth
+ * `{ code }` exchange.
+ *
+ * Meta signs every delivery, so an `x-hub-signature-256` header is the
+ * strongest signal. The payload shape (`object` and/or `entry[]`) is checked as
+ * a fallback for apps whose app secret is not configured on the server. An OAuth
+ * body is `{ code: "..." }` and never matches either check, so this cannot
+ * misroute login traffic.
+ */
+export function isMetaWebhookDelivery(rawBody: string, signatureHeader: string | null): boolean {
+  if (signatureHeader?.startsWith("sha256=")) return true
+  try {
+    const parsed = JSON.parse(rawBody)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false
+    return typeof parsed.object === "string" || Array.isArray(parsed.entry)
+  } catch {
+    return false
+  }
+}
