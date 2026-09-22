@@ -20,6 +20,8 @@ register("./loader.mjs", import.meta.url)
 
 const cb = await import(new URL("../../app/api/instagram/callback/route.ts", import.meta.url).href)
 const wh = await import(new URL("../../app/api/instagram/webhook/route.ts", import.meta.url).href)
+// The real Graph payload builder (pure module, no stubs involved).
+const realIg = await import(new URL("../../lib/instagram-api.ts", import.meta.url).href)
 
 const IG_ID = "17841400000000000"
 
@@ -31,6 +33,7 @@ function fakeRequest({ url, query, body, headers } = {}) {
     headers: new Headers(headers),
     nextUrl: { searchParams: u.searchParams },
     text: async () => body ?? "",
+    json: async () => JSON.parse(body ?? "{}"),
   }
 }
 
@@ -201,6 +204,154 @@ const check = (name, fn) => {
 {
   const res = await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: "{}" }))
   check("G POST without code -> 400 No code", () => assert.equal(res.status, 400))
+}
+
+// H. CARD / LINK: every configured field reaches the sender intact
+{
+  state.automations = [
+    {
+      id: "card1",
+      name: "Guide card",
+      trigger_source: "dm",
+      trigger_type: "keyword",
+      trigger_value: "guide",
+      response_content: {
+        card: {
+          title: "Super",
+          subtitle: "Here is what you wanted",
+          image_url: "https://example.com/cover.png",
+          url: "https://example.com/landing",
+          buttons: [{ type: "web_url", title: "Open", url: "https://example.com/landing" }],
+        },
+      },
+      is_active: true,
+    },
+  ]
+  state.cardSent = 0
+  state.lastCard = null
+  const raw = delivery("guide", "m5")
+  await cb.POST(fakeRequest({
+    url: "https://x/api/instagram/callback",
+    body: raw,
+    headers: { "x-hub-signature-256": sign(raw) },
+  }))
+  check("H Card/Link config reaches the sender with url + image_url + buttons", () => {
+    assert.equal(state.cardSent, 1, "card template must be sent")
+    assert.deepEqual(state.lastCard, {
+      title: "Super",
+      subtitle: "Here is what you wanted",
+      image_url: "https://example.com/cover.png",
+      url: "https://example.com/landing",
+      buttons: [{ type: "web_url", title: "Open", url: "https://example.com/landing" }],
+    })
+  })
+}
+
+// I. The Graph payload itself carries the link, image and buttons
+{
+  const att = realIg.buildCardAttachment({
+    title: "Super",
+    subtitle: "Here is what you wanted",
+    image_url: "https://example.com/cover.png",
+    url: "https://example.com/landing",
+    buttons: [{ type: "web_url", title: "Open", url: "https://example.com/landing" }],
+  })
+  const el = att.attachment.payload.elements[0]
+  check("I generic template carries default_action (link), image_url, subtitle, buttons", () => {
+    assert.equal(att.attachment.type, "template")
+    assert.equal(att.attachment.payload.template_type, "generic")
+    assert.equal(el.default_action.url, "https://example.com/landing")
+    assert.equal(el.image_url, "https://example.com/cover.png")
+    assert.equal(el.subtitle, "Here is what you wanted")
+    assert.deepEqual(el.buttons, [{ type: "web_url", title: "Open", url: "https://example.com/landing" }])
+  })
+
+  const bare = realIg.buildCardAttachment({ title: "Only title", subtitle: "", image_url: "", url: "", buttons: [] })
+  const bareEl = bare.attachment.payload.elements[0]
+  check("I2 empty image/link/buttons are omitted (no invalid empty button array)", () => {
+    assert.equal("image_url" in bareEl, false)
+    assert.equal("default_action" in bareEl, false)
+    assert.equal("buttons" in bareEl, false)
+  })
+
+  const clamped = realIg.buildCardAttachment({ title: "x".repeat(120), buttons: [] })
+  check("I3 title/subtitle are clamped to Instagram's 80-char limit", () => {
+    assert.equal(clamped.attachment.payload.elements[0].title.length, 80)
+  })
+}
+
+// J. A rejected card is not silently dropped — the link still gets delivered
+{
+  state.failCardTemplate = true
+  state.sent = 0
+  state.lastSend = null
+  const raw = delivery("guide", "m6")
+  await cb.POST(fakeRequest({
+    url: "https://x/api/instagram/callback",
+    body: raw,
+    headers: { "x-hub-signature-256": sign(raw) },
+  }))
+  check("J rejected card falls back to a supported message containing the link", () => {
+    assert.ok(state.cardSent >= 1, "template attempted")
+    assert.ok(state.lastSend, "fallback text must be sent")
+    assert.ok(state.lastSend.text.includes("https://example.com/landing"), "link must still reach the recipient")
+  })
+  state.failCardTemplate = false
+}
+
+// K. Image URL validation (the Bing-page case from the bug report)
+{
+  global.fetch = async () => ({ ok: true, headers: new Headers({ "content-type": "text/html; charset=utf-8" }) })
+  const page = await realIg.validateImageUrl("https://www.bing.com/images/search?view=detailv2&id=abc")
+  global.fetch = async () => ({ ok: true, headers: new Headers({ "content-type": "image/png" }) })
+  const img = await realIg.validateImageUrl("https://example.com/cover.png")
+  global.fetch = async () => { throw new Error("offline") }
+  const unknown = await realIg.validateImageUrl("https://cdn.example.com/xyz")
+  check("K image validation rejects web pages, accepts images, tolerates unverifiable URLs", () => {
+    assert.equal(page.valid, false)
+    assert.equal(img.valid, true)
+    assert.equal(unknown.valid, true)
+  })
+}
+
+// L. Save-time validation: a web-page image URL is rejected with a clear message
+{
+  const autos = await import(new URL("../../app/api/automations/route.ts", import.meta.url).href)
+  const cardBody = (image) =>
+    JSON.stringify({
+      userId: "256123",
+      name: "Card rule",
+      trigger_source: "dm",
+      trigger_type: "keyword",
+      trigger_value: "guide",
+      content: {
+        card: {
+          title: "Super",
+          subtitle: "Here is what you wanted",
+          image_url: image,
+          url: "https://example.com/landing",
+          buttons: [],
+        },
+      },
+    })
+
+  global.fetch = async () => ({ ok: true, headers: new Headers({ "content-type": "text/html; charset=utf-8" }) })
+  const bad = await autos.POST(fakeRequest({
+    url: "https://x/api/automations",
+    body: cardBody("https://www.bing.com/images/search?view=detailv2&id=abc"),
+  }))
+
+  global.fetch = async () => ({ ok: true, headers: new Headers({ "content-type": "image/png" }) })
+  const good = await autos.POST(fakeRequest({
+    url: "https://x/api/automations",
+    body: cardBody("https://example.com/cover.png"),
+  }))
+
+  check("L web-page image URL is rejected at save time with a clear message", () => {
+    assert.equal(bad.status, 400)
+    assert.match(bad._json.error, /image/i)
+  })
+  check("L2 a real image URL saves successfully", () => assert.equal(good.status, 200))
 }
 
 console.log(results.join("\n"))

@@ -48,6 +48,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   const [cardTitle, setCardTitle] = useState("")
   const [cardSubtitle, setCardSubtitle] = useState("")
   const [cardImage, setCardImage] = useState("")
+  const [cardUrl, setCardUrl] = useState("")
   const [buttons, setButtons] = useState<ProButton[]>([])
   const [mediaUrl, setMediaUrl] = useState("")
   const [mediaType, setMediaType] = useState<"image" | "video" | "audio">("image")
@@ -104,7 +105,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     if (content.media?.url) {
       setType("media"); setMediaUrl(content.media.url); setMediaType(content.media.type || "image"); setMessageText(content.message || "")
     } else if (content.card) {
-      setType("card"); setCardTitle(content.card.title || ""); setCardSubtitle(content.card.subtitle || ""); setCardImage(content.card.image_url || "")
+      setType("card"); setCardTitle(content.card.title || ""); setCardSubtitle(content.card.subtitle || ""); setCardImage(content.card.image_url || ""); setCardUrl(content.card.url || "")
       setButtons((content.card.buttons || []).map((b: any, i: number) => ({ id: `${Date.now()}_${i}`, ...b })))
     } else {
       setType("text"); setMessageText(content.message || "")
@@ -225,7 +226,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
           return { type: "postback" as const, title: b.title, payload: b.payload }
         })
         .filter((b) => b.title)
-      content.card = { title: cardTitle, subtitle: cardSubtitle || undefined, image_url: cardImage || undefined, buttons: cleanButtons }
+      content.card = { title: cardTitle, subtitle: cardSubtitle || undefined, image_url: cardImage || undefined, url: cardUrl || undefined, buttons: cleanButtons }
     }
 
     const payload = {
@@ -251,7 +252,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
         toast.success(isEditing ? "Automation updated" : "Automation is live")
         onSuccess()
       } else {
-        toast.error("Could not save — try again")
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || "Could not save — try again")
       }
     } catch {
       toast.error("Network error")
@@ -575,7 +577,11 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                         <FieldLabel>Card configuration</FieldLabel>
                         <TextField value={cardTitle} onChange={setCardTitle} placeholder="Card main title" />
                         <TextField value={cardSubtitle} onChange={setCardSubtitle} placeholder="Subtitle description (optional)" />
-                        <TextField value={cardImage} onChange={setCardImage} placeholder="Cover image URL (optional)" />
+                        <TextField value={cardImage} onChange={setCardImage} placeholder="Cover image URL (direct .jpg/.png link)" />
+                        <p className="text-[11px] text-muted-foreground">
+                          Instagram fetches this itself, so it must be a direct image file — a website or search page will not work.
+                        </p>
+                        <TextField value={cardUrl} onChange={setCardUrl} placeholder="Link URL — opens when the card is tapped (optional)" />
                       </div>
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between border-b border-border pb-2">
@@ -850,6 +856,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                           <div className="p-3">
                             <p className="text-xs font-bold text-foreground line-clamp-1">{cardTitle || "Card Title"}</p>
                             {cardSubtitle && <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 leading-tight">{cardSubtitle}</p>}
+                            {cardUrl && <p className="text-[10px] text-[#3797f0] mt-1 truncate">{cardUrl}</p>}
                           </div>
                           {buttons.filter((b) => b.title).map((b) => (
                             <div key={b.id} className="border-t border-border py-2 text-center text-[10px] font-bold text-[#3797f0] bg-white/[0.01] cursor-pointer hover:bg-white/[0.03] transition-colors">

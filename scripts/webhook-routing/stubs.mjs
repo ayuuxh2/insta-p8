@@ -25,6 +25,10 @@ export const state = {
   ],
   sent: 0,
   lastSend: null,
+  cardSent: 0,
+  lastCard: null,
+  lastMedia: null,
+  failCardTemplate: false,
   saved: [],
   audit: [],
   upserts: [],
@@ -111,14 +115,26 @@ export async function sendTextDM(token, recipient, text) {
   state.lastSend = { recipient, text }
   return { ok: true, id: "msg_out" }
 }
-export async function sendCardDM() { state.sent++; return { ok: true } }
-export async function sendMediaDM() { state.sent++; return { ok: true } }
+export async function sendCardDM(token, recipient, card) {
+  state.cardSent++
+  state.lastCard = card
+  if (state.failCardTemplate) return { ok: false, error: { code: 100, message: "image_url could not be fetched" } }
+  return { ok: true }
+}
+export async function sendMediaDM(token, recipient, type, url) {
+  state.sent++
+  state.lastMedia = { type, url }
+  return { ok: true }
+}
 export async function sendSenderAction() { return { ok: true } }
 export async function replyToComment() { return { ok: true } }
 export async function fetchProfile() { return { username: "sender" } }
 export async function verifyIdOwnership() { return false }
 export function sleep() { return Promise.resolve() }
 export function buildFollowGateCard() { return { title: "gate", buttons: [] } }
+
+// Reuse the real URL helpers so this stub can never drift from production behaviour.
+export { isHttpUrl, validateImageUrl } from "../../lib/instagram-api.ts"
 
 // ---------- @/lib/unlock-tracking ----------
 export function unlockKey(senderId, ruleId) { return `${senderId}::${ruleId}` }

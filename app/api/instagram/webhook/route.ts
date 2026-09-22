@@ -13,6 +13,7 @@ import {
   fetchProfile,
   verifyIdOwnership,
   sleep,
+  isHttpUrl,
   buildFollowGateCard,
 } from "@/lib/instagram-api"
 import { generateAIReply } from "@/lib/ai-reply"
@@ -87,6 +88,75 @@ function keywordMatches(triggerValue: string, text: string): boolean {
 }
 
 // ============================================================
+// Card / Link delivery
+// ============================================================
+
+// Instagram's generic template requires more than just a title (Meta: "at least
+// one property must be set in addition to title"), so a bare-title card is sent
+// as plain text instead of being rejected outright.
+function cardHasRichContent(card: any): boolean {
+  if (!card) return false
+  return Boolean(
+    card.subtitle ||
+      isHttpUrl(card.image_url) ||
+      isHttpUrl(card.url) ||
+      (Array.isArray(card.buttons) && card.buttons.some((b: any) => b?.title)),
+  )
+}
+
+function cardFallbackText(card: any): string {
+  const parts = [card?.title, card?.subtitle].filter(Boolean)
+  if (isHttpUrl(card?.url)) parts.push(card.url.trim())
+  return parts.join("\n")
+}
+
+/**
+ * Sends a Card/Link reply as a real Instagram generic template: cover image,
+ * title, subtitle, the configured link as the tappable `default_action`, and up
+ * to three buttons.
+ *
+ * If Meta rejects the template — the usual cause is an image_url it cannot fetch
+ * (a web page instead of a direct image) — the failure is logged with Meta's
+ * error and the same content is re-delivered as a supported media/text message,
+ * so the recipient still receives the link instead of just the title.
+ */
+async function sendCardResponse(
+  token: string,
+  recipient: { id?: string; comment_id?: string },
+  card: any,
+) {
+  if (!cardHasRichContent(card)) {
+    if (card?.title) return sendTextDM(token, recipient, String(card.title))
+    return { ok: false, error: "empty card" }
+  }
+
+  console.log(
+    `[webhook] card send: image=${isHttpUrl(card.image_url)} link=${isHttpUrl(card.url)} buttons=${
+      Array.isArray(card.buttons) ? card.buttons.filter((b: any) => b?.title).length : 0
+    }`,
+  )
+
+  const result = await sendCardDM(token, recipient, card)
+  if (result.ok) return result
+
+  const imageUrl = isHttpUrl(card.image_url) ? card.image_url.trim() : null
+  const text = cardFallbackText(card)
+  console.warn(
+    `[webhook] card template rejected by Meta — falling back to ${imageUrl ? "media + text" : "text"}; ` +
+      `image_url=${imageUrl ? "set" : "none"} link=${isHttpUrl(card.url) ? "set" : "none"}`,
+  )
+
+  let sent: any = { ok: false, error: result.error }
+  if (imageUrl) sent = await sendMediaDM(token, recipient, "image", imageUrl)
+  if (text) {
+    const textResult = await sendTextDM(token, recipient, text)
+    if (textResult.ok) return textResult
+    if (!sent.ok) sent = textResult
+  }
+  return sent
+}
+
+// ============================================================
 // Unified response sender — handles text, card, media, quick
 // replies, typing indicators, and human-like delays.
 // ============================================================
@@ -115,7 +185,7 @@ async function sendAutomationResponse(
       result = await sendTextDM(token, recipient, content.message, quickReplies)
     }
   } else if (content.card) {
-    result = await sendCardDM(token, recipient, content.card)
+    result = await sendCardResponse(token, recipient, content.card)
   } else if (content.message) {
     result = await sendTextDM(token, recipient, content.message, quickReplies)
   } else {

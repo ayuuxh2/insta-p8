@@ -10,7 +10,10 @@ export interface IGButton {
 export interface IGCard {
   title: string
   subtitle?: string
+  /** Direct image URL (Meta cURLs it, so it must be a real image, not a web page). */
   image_url?: string
+  /** Destination link rendered as the template's default_action (tap-to-open). */
+  url?: string
   buttons: IGButton[]
 }
 
@@ -52,23 +55,83 @@ async function post(path: string, token: string, body: any): Promise<SendResult>
   }
 }
 
+export function isHttpUrl(value?: string | null): value is string {
+  return typeof value === "string" && /^https?:\/\/\S+$/i.test(value.trim())
+}
+
+/** Meta caps generic-template title/subtitle at 80 characters; longer values make it reject the whole message. */
+function clamp80(value?: string | null): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, 80) : undefined
+}
+
+/**
+ * Builds the Instagram generic template that actually carries the image, text
+ * and link.
+ *
+ * Instagram's generic template supports: title, subtitle, image_url, a
+ * `default_action` (what opens when the card is tapped) and up to three
+ * web_url/postback buttons. The previous implementation never set
+ * `default_action`, so the configured link was dropped — recipients saw only
+ * the title/subtitle. It also always attached an empty `buttons: []` array,
+ * which is not a usable button list.
+ */
 export function buildCardAttachment(card: IGCard) {
   const buttons = (card.buttons || [])
-    .filter((b) => b.title)
-    .map((b) => ({
-      type: b.type,
-      title: b.title,
-      url: b.type === "web_url" ? b.url : undefined,
-      payload: b.type === "postback" ? b.payload : undefined,
-    }))
-  const element: any = { title: card.title, buttons }
-  if (card.subtitle) element.subtitle = card.subtitle
-  if (card.image_url?.startsWith("http")) element.image_url = card.image_url
+    .filter((b) => b.title && (b.type === "web_url" ? isHttpUrl(b.url) : Boolean(b.payload)))
+    .slice(0, 3)
+    .map((b) =>
+      b.type === "web_url"
+        ? { type: "web_url" as const, title: b.title, url: b.url!.trim() }
+        : { type: "postback" as const, title: b.title, payload: b.payload },
+    )
+
+  const element: any = { title: clamp80(card.title) ?? card.title }
+  const subtitle = clamp80(card.subtitle)
+  if (subtitle) element.subtitle = subtitle
+  if (isHttpUrl(card.image_url)) element.image_url = card.image_url.trim()
+  // Tapping the card opens this link. Without it, "Card / Link" had no link at all.
+  if (isHttpUrl(card.url)) element.default_action = { type: "web_url", url: card.url.trim() }
+  if (buttons.length) element.buttons = buttons
+
   return {
     attachment: {
       type: "template",
       payload: { template_type: "generic", elements: [element] },
     },
+  }
+}
+
+/**
+ * Best-effort check that a card image URL is a real, publicly fetchable image.
+ *
+ * Instagram fetches `image_url` itself. A web page URL (e.g. a Bing Images
+ * search/detail page) is HTML, so Meta cannot render it and the card arrives
+ * with no image. Only a definitive non-image content-type blocks the save — an
+ * unreachable host or a server that refuses HEAD is allowed through, because a
+ * valid URL our server cannot probe should not be rejected.
+ */
+export async function validateImageUrl(url: string): Promise<{ valid: boolean; reason?: string }> {
+  const trimmed = url.trim()
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return { valid: false, reason: "The card image URL must start with https://" }
+  }
+  try {
+    const res = await fetch(trimmed, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!res.ok) return { valid: true }
+    const type = (res.headers.get("content-type") || "").toLowerCase()
+    if (!type || type.startsWith("image/")) return { valid: true }
+    return {
+      valid: false,
+      reason: `That image URL serves "${type.split(";")[0]}" instead of an image. Paste a direct image link (ending in .jpg, .png, .webp…), not a website page.`,
+    }
+  } catch {
+    return { valid: true }
   }
 }
 

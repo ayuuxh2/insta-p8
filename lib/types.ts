@@ -26,7 +26,10 @@ export interface ResponseContent {
   card?: {
     title: string
     subtitle?: string
+    /** Direct image URL (Meta fetches it). Not a web page. */
     image_url?: string
+    /** Destination link — sent as the template's default_action (tap the card to open). */
+    url?: string
     buttons: Omit<ProButton, "id">[]
   }
   media?: MediaResponse

@@ -35,6 +35,7 @@ async function test(matched, profileFails = false) {
       fetchProfile: async () => { await profileGate; if (profileFails) throw Error('profile unavailable'); return { username: 'sender' } },
       sendTextDM: async () => { sent++; return { ok: true } },
       sendSenderAction: async () => ({ ok: true }),
+      isHttpUrl: v => typeof v === 'string' && /^https?:\/\//i.test(v),
     },
     '@/lib/ai-reply': {}, '@/lib/unlock-tracking': { unlockKey: () => 'key' },
     '@/lib/webhook-verify': { handleWebhookVerification: () => ({}), isMetaWebhookDelivery: () => false },
