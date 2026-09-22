@@ -1,8 +1,19 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { handleWebhookVerification } from "@/lib/webhook-verify"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
+
+  // Meta webhook verification (hub.* query params).
+  // The canonical webhook endpoint is /api/instagram/webhook — that is where Meta
+  // should deliver events. This branch exists so the OAuth callback also answers the
+  // verification handshake, keeping webhook setup working for anyone who pointed the
+  // Meta "Callback URL" at this route instead. Actual webhook POSTs never land here.
+  if (searchParams.has("hub.mode")) {
+    return handleWebhookVerification(searchParams)
+  }
+
   const code = searchParams.get("code")
   const error = searchParams.get("error")
 

@@ -17,8 +17,8 @@ import {
 } from "@/lib/instagram-api"
 import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
+import { handleWebhookVerification } from "@/lib/webhook-verify"
 
-const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
 // Meta signs every webhook POST with HMAC-SHA256 of the raw body. Depending on app setup the
 // signing key is the Instagram app secret or the parent Meta app secret, so accept either.
 const APP_SECRETS = [process.env.INSTAGRAM_APP_SECRET, process.env.META_APP_SECRET].filter(
@@ -44,15 +44,8 @@ const DEFAULT_PUBLIC_REPLIES = ["Check your DMs! 📥", "Sent! 🔥", "Check inb
 const UNLOCK_GATE_MAX_ATTEMPTS = 3
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const mode = searchParams.get("hub.mode")
-  const token = searchParams.get("hub.verify_token")
-  const challenge = searchParams.get("hub.challenge")
-
-  if (mode === "subscribe" && WEBHOOK_VERIFY_TOKEN && token === WEBHOOK_VERIFY_TOKEN && challenge) {
-    return new NextResponse(challenge, { status: 200 })
-  }
-  return NextResponse.json({ error: "Invalid token" }, { status: 403 })
+  // Meta webhook verification handshake — shared with /api/instagram/callback.
+  return handleWebhookVerification(request.nextUrl.searchParams)
 }
 
 // ============================================================

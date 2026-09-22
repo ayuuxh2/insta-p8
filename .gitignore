@@ -30,3 +30,4 @@ next-env.d.ts
 # video files (test/generated)
 *.mp4
 /washed_videos/
+META API DOCUMENTATION/
