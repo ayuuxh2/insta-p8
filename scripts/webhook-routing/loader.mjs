@@ -18,6 +18,17 @@ export async function resolve(specifier, context, next) {
   if (specifier === "@/lib/webhook-verify") {
     return { url: new URL("../../lib/webhook-verify.ts", here).href, shortCircuit: true }
   }
+  // Real auth guard so the authorization checks are exercised, not simulated.
+  if (specifier === "@/lib/api-auth") {
+    return { url: new URL("../../lib/api-auth.ts", here).href, shortCircuit: true }
+  }
+  // Real button contract, so API validation + serialization are genuinely tested.
+  if (specifier === "@/lib/card-buttons") {
+    return { url: new URL("../../lib/card-buttons.ts", here).href, shortCircuit: true }
+  }
+  // card-buttons.ts imports the URL helper with an extensionless relative path
+  // (how TypeScript/Next resolve it); Node needs it mapped explicitly.
+  if (specifier === "./instagram-api") return { url: stubs, shortCircuit: true }
   // The OAuth callback delegates Meta deliveries to the real webhook route.
   if (specifier === "../webhook/route" || specifier.endsWith("/webhook/route")) {
     return { url: new URL("../../app/api/instagram/webhook/route.ts", here).href, shortCircuit: true }

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireUser } from "@/lib/api-auth"
 
 /**
  * POST /api/instagram/send-message
@@ -19,6 +20,9 @@ export async function POST(request: NextRequest) {
     if (!user_id || !recipient_id || !message) {
       return NextResponse.json({ error: "Missing required fields: user_id, recipient_id, message" }, { status: 400 })
     }
+
+    const denied = requireUser(request, user_id)
+    if (denied) return denied
 
     const supabase = await getSupabaseServerClient()
 

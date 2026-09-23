@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireOwnedRow } from "@/lib/api-auth"
 
 export async function GET(request: NextRequest) {
     try {
@@ -7,6 +8,10 @@ export async function GET(request: NextRequest) {
         if (!conversationId) return NextResponse.json({ error: "Missing conversationId" }, { status: 400 })
 
         const supabase = await getSupabaseServerClient()
+
+        // A conversation id alone must not grant access to another account's messages.
+        const owned = await requireOwnedRow(request, supabase, "conversations", "id", conversationId)
+        if ("denied" in owned) return owned.denied
 
         // Fetch messages for this conversation
         const { data: messages, error } = await supabase

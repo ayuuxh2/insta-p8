@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireUser } from "@/lib/api-auth"
 
 export async function GET(request: NextRequest) {
     try {
@@ -7,6 +8,9 @@ export async function GET(request: NextRequest) {
         const userId = searchParams.get("userId")
 
         if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+
+        const denied = requireUser(request, userId)
+        if (denied) return denied
 
         const supabase = await getSupabaseServerClient()
         const { data, error } = await supabase
@@ -33,10 +37,24 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
         }
 
+        const denied = requireUser(request, userId)
+        if (denied) return denied
+
+        if (iceBreakers.length > 4) {
+            return NextResponse.json({ error: "Instagram allows at most 4 ice breakers" }, { status: 400 })
+        }
+
+        const rows = iceBreakers.map((ib: any) => ({
+            question: typeof ib?.question === "string" ? ib.question.trim() : "",
+            response: typeof ib?.response === "string" ? ib.response.trim() : "",
+        }))
+        if (rows.some((row) => !row.question || !row.response)) {
+            return NextResponse.json({ error: "Every ice breaker needs a question and a response" }, { status: 400 })
+        }
+
         const supabase = await getSupabaseServerClient()
 
-        // 1. Update Database (Replace all for simplicity or Upsert)
-        // Strategy: Delete all for user and re-insert. Simple and effective for limited list (max 4).
+        // 1. Replace the user's rows (Instagram caps the list at 4).
         const { error: deleteError } = await supabase
             .from("ice_breakers")
             .delete()
@@ -44,23 +62,30 @@ export async function POST(request: NextRequest) {
 
         if (deleteError) throw deleteError
 
-        const { data: inserted, error: insertError } = await supabase
-            .from("ice_breakers")
-            .insert(iceBreakers.map((ib: any) => ({
-                user_id: userId,
-                question: ib.question,
-                response: ib.response,
-                is_active: true
-            })))
-            .select()
+        let inserted: any[] = []
+        if (rows.length > 0) {
+            const { data, error: insertError } = await supabase
+                .from("ice_breakers")
+                .insert(rows.map((row) => ({
+                    user_id: userId,
+                    question: row.question.slice(0, 80),
+                    response: row.response.slice(0, 1000),
+                    is_active: true
+                })))
+                .select()
 
-        if (insertError) throw insertError
+            if (insertError) throw insertError
+            inserted = data ?? []
+        }
 
-        // 2. Sync to Instagram
-        const { data: user } = await supabase.from("users").select("access_token, page_id").eq("id", userId).single()
+        // 2. Sync to Instagram — this is what actually makes them visible to users.
+        const { data: user } = await supabase.from("users").select("access_token").eq("id", userId).single()
 
-        if (user && user.access_token && user.page_id) {
-            // Construct IG Payload
+        if (!user?.access_token) {
+            return NextResponse.json({ error: "Instagram is not connected for this account" }, { status: 409 })
+        }
+
+        {
             const ice_breakers = inserted.map((ib: any) => ({
                 question: ib.question,
                 payload: `ICE_BREAKER_${ib.id}`
@@ -81,20 +106,29 @@ export async function POST(request: NextRequest) {
             // We need to know which response to send. 
 
             const response = await fetch(
-                `https://graph.instagram.com/v21.0/me/messenger_profile?access_token=${user.access_token}`,
+                `https://graph.instagram.com/v24.0/me/messenger_profile?access_token=${encodeURIComponent(user.access_token)}`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        ice_breakers: ice_breakers,
-                        platform: "instagram" // Important
+                        ice_breakers,
+                        platform: "instagram",
                     })
                 }
             )
-            const igResult = await response.json()
-            if (igResult.error) {
-                console.error("IG Sync Error", igResult.error)
-                return NextResponse.json({ success: true, warning: "Saved to DB but IG Sync failed", error: igResult.error }, { status: 200 })
+            const igResult = await response.json().catch(() => null)
+            if (!response.ok || igResult?.error) {
+                const meta = igResult?.error
+                console.error(
+                    `[ice-breakers] Instagram sync failed: HTTP ${response.status}` +
+                        (meta ? ` type=${meta.type ?? "-"} code=${meta.code ?? "-"} message=${meta.message ?? "-"}` : ""),
+                )
+                // Rows are saved locally, but the feature users actually see is NOT live.
+                // Reporting success here is what made this look like it worked.
+                return NextResponse.json(
+                    { error: "Saved locally, but Instagram rejected the sync — your ice breakers are not live yet.", savedLocally: true },
+                    { status: 502 },
+                )
             }
         }
 

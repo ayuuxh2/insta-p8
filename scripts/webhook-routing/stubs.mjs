@@ -15,6 +15,7 @@ export const state = {
   automations: [
     {
       id: "rule1",
+      user_id: "256123",
       name: "Price rule",
       trigger_source: "dm",
       trigger_type: "keyword",
@@ -27,6 +28,7 @@ export const state = {
   lastSend: null,
   cardSent: 0,
   lastCard: null,
+  commentReplies: 0,
   lastMedia: null,
   failCardTemplate: false,
   saved: [],
@@ -40,7 +42,15 @@ export class NextResponse {
     this.body = body
     this.status = init.status ?? 200
     this.headers = new Headers(init.headers)
-    this.cookies = { set() {}, get() { return undefined }, delete() {} }
+    this.cookies = {
+      set: (name, value, options) => {
+        this._cookie = { name, value, options }
+      },
+      get() {
+        return undefined
+      },
+      delete() {},
+    }
   }
   static json(data, init = {}) {
     const res = new NextResponse(JSON.stringify(data), init)
@@ -68,27 +78,111 @@ export class NextRequest {
 }
 
 // ---------- @/lib/supabase-server ----------
+//
+// The harness emulates the database's UNIQUE constraints *synchronously inside
+// insert()*, because that is the property the production fix relies on. A real
+// Postgres unique index serialises concurrent inserts on the indexed value; a
+// check performed later (e.g. in `then`) would leave the same race the old
+// SELECT-then-INSERT code had, and the concurrency test would pass vacuously.
 function makeDb() {
-  let inserted = null
   function from(table) {
+    // Result of this query builder only — scoped per from() so concurrent
+    // queries (the webhook runs inbox bookkeeping alongside delivery) cannot
+    // read each other's pending insert/update.
+    let pending = null
+    const eqs = []
+    const containsArgs = []
+    const orArgs = []
+    const match = (row) => eqs.every(([column, value]) => String(row[column]) === String(value))
+    const containsMatch = (row) =>
+      containsArgs.every(([column, value]) =>
+        Object.entries(value).every(([key, expected]) => String(row?.[column]?.[key]) === String(expected)),
+      )
+    const duplicateKey = { code: "23505", message: "duplicate key value violates unique constraint" }
     const q = {
       select() { return q },
-      eq() { return q },
-      or() { return q },
-      update(row) { inserted = row; return q },
-      insert(row) { inserted = row; return q },
+      eq(column, value) { eqs.push([column, value]); return q },
+      contains(column, value) { containsArgs.push([column, value]); return q },
+      or(expr) { orArgs.push(expr); return q },
+      limit() { return q },
+      order() { return q },
+      update(row) {
+        if (table === "automations") {
+          const target = state.automations.find(match)
+          if (target) Object.assign(target, row)
+          pending = { data: target || null, error: null }
+          return q
+        }
+        pending = { data: null, error: null }
+        return q
+      },
+      insert(row) {
+        if (table === "automations") {
+          const saved = { id: row.id || `auto_${state.automations.length + 1}`, is_active: true, ...row }
+          state.automations.push(saved)
+          pending = { data: saved, error: null }
+          return q
+        }
+        if (table === "webhook_events" && row?.event_key) {
+          if (state.audit.some((r) => r.event_key === row.event_key)) {
+            pending = { data: null, error: duplicateKey }
+            return q
+          }
+        }
+        if (table === "messages" && row?.id) {
+          if (state.saved.some((r) => r.id === row.id)) {
+            pending = { data: null, error: duplicateKey }
+            return q
+          }
+        }
+        if (table === "messages") state.saved.push(row)
+        if (table === "webhook_events") state.audit.push(row)
+        pending = { data: null, error: null }
+        return q
+      },
       upsert(row) { state.upserts.push(row); return Promise.resolve({ error: null }) },
       single() {
-        return Promise.resolve({
-          data: table === "users" ? state.user : table === "conversations" ? { id: "conv1" } : null,
-          error: null,
-        })
+        if (pending) {
+          const p = pending
+          pending = null
+          return Promise.resolve(p)
+        }
+        if (table === "users") {
+          // Honour `.or(business_account_id.eq.X,page_id.eq.X)` so account
+          // resolution is genuinely ID-based (a foreign ID must not resolve).
+          if (orArgs.length) {
+            const ok = orArgs.some((expr) =>
+              expr.split(",").some((clause) => {
+                const m = /^([\w.]+?)\.eq\.(.*)$/.exec(clause.trim())
+                if (!m) return true
+                return String(state.user[m[1]]) === String(m[2])
+              }),
+            )
+            return Promise.resolve({ data: ok ? state.user : null, error: null })
+          }
+          return Promise.resolve({ data: state.user, error: null })
+        }
+        if (table === "conversations") return Promise.resolve({ data: { id: "conv1" }, error: null })
+        return Promise.resolve({ data: null, error: null })
+      },
+      maybeSingle() {
+        if (table === "automations") {
+          const row = state.automations.find(match)
+          return Promise.resolve({ data: row ? { user_id: row.user_id } : null, error: null })
+        }
+        if (table === "conversations") return Promise.resolve({ data: { user_id: state.user.id }, error: null })
+        return Promise.resolve({ data: null, error: null })
       },
       then(resolve, reject) {
+        if (pending) {
+          const p = pending
+          pending = null
+          return Promise.resolve(p).then(resolve, reject)
+        }
         let data = null
         if (table === "automations") data = state.automations
-        if (table === "messages" && inserted) { state.saved.push(inserted); inserted = null }
-        if (table === "webhook_events" && inserted) { state.audit.push(inserted); inserted = null }
+        if (table === "messages") data = state.saved.filter(match)
+        if (table === "webhook_events") data = state.audit.filter((row) => match(row) && containsMatch(row))
         return Promise.resolve({ data, error: null }).then(resolve, reject)
       },
     }
@@ -127,7 +221,10 @@ export async function sendMediaDM(token, recipient, type, url) {
   return { ok: true }
 }
 export async function sendSenderAction() { return { ok: true } }
-export async function replyToComment() { return { ok: true } }
+export async function replyToComment() {
+  state.commentReplies++
+  return { ok: true }
+}
 export async function fetchProfile() { return { username: "sender" } }
 export async function verifyIdOwnership() { return false }
 export function sleep() { return Promise.resolve() }

@@ -10,6 +10,12 @@ import {
 } from "lucide-react"
 import { TagInput } from "@/components/ui/tag-input"
 import type { ProButton, QuickReplyOption, Automation } from "@/lib/types"
+import {
+  MAX_CARD_BUTTONS,
+  cardButtonPreviewLabel,
+  serializeCardButtons,
+  validateCardButtons,
+} from "@/lib/card-buttons"
 import { toast } from "sonner"
 
 /* ============================================================
@@ -31,6 +37,11 @@ const STEPS = [
   { key: "response", label: "Reply", sub: "Write what people receive" },
   { key: "settings", label: "Review", sub: "Name and publish" },
 ] as const
+
+// Monotonic counter so two buttons added in the same millisecond never share an
+// id/React key (a collision previously made a row fail to render or update).
+let buttonIdSeq = 0
+const nextButtonId = () => `btn_${Date.now().toString(36)}_${(buttonIdSeq++).toString(36)}`
 
 export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: CreateRuleFormProps) {
   const isEditing = !!editRule
@@ -136,12 +147,16 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
   /* ---------- helpers ---------- */
   const addButton = () => {
-    if (buttons.length >= 3) return
-    setButtons([...buttons, { id: Date.now().toString(), type: "web_url", title: "", url: "", payload: "" }])
+    setButtons((current) => {
+      if (current.length >= MAX_CARD_BUTTONS) return current
+      return [...current, { id: nextButtonId(), type: "web_url", title: "", url: "", payload: "" }]
+    })
   }
+  // Functional updates: reading `buttons` from the closure dropped edits when two
+  // interactions landed in the same render (e.g. adding then typing quickly).
   const updateButton = (id: string, field: keyof ProButton, value: string) =>
-    setButtons(buttons.map((b) => (b.id === id ? { ...b, [field]: value } : b)))
-  const removeButton = (id: string) => setButtons(buttons.filter((b) => b.id !== id))
+    setButtons((current) => current.map((b) => (b.id === id ? { ...b, [field]: value } : b)))
+  const removeButton = (id: string) => setButtons((current) => current.filter((b) => b.id !== id))
 
   const addQuickReply = () => {
     if (quickReplies.length >= 4) return
@@ -157,10 +172,16 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     ? hasSelectedReelOption // Comment trigger is valid once they select a specific post or global option
     : !needsKeywords || triggers.length > 0
 
+  // Buttons are part of the saved payload, so an incomplete button must block
+  // publishing (with a visible reason) instead of being silently dropped on save.
+  // Only relevant when a card is actually the DM payload; with a comment
+  // "public_only" reply the card is unused, so it must not block saving.
+  const usesCard = type === "card" && replyMode !== "public_only"
+  const buttonError = usesCard ? validateCardButtons(buttons) : null
   const thenValid =
     replyMode === "public_only" ||
     (type === "text" ? messageText.trim().length > 0 : type === "card" ? cardTitle.trim().length > 0 : mediaUrl.trim().length > 0)
-  const canSave = whenValid && thenValid && name.trim().length > 0
+  const canSave = whenValid && thenValid && name.trim().length > 0 && !buttonError
 
   const stepValid = [
     whenValid,  // step 0
@@ -193,7 +214,13 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
   /* ---------- save ---------- */
   const handleSubmit = async () => {
-    if (!canSave || saving) return
+    if (saving) return
+    // Guard even when the button is disabled, so the reason is always surfaced.
+    if (type === "card" && replyMode !== "public_only") {
+      const err = validateCardButtons(buttons)
+      if (err) { toast.error(err); return }
+    }
+    if (!canSave) return
     setSaving(true)
 
     const isReplyAll = triggerSource === "comment" && triggers.length === 0
@@ -216,17 +243,15 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
       content.media = { type: mediaType, url: mediaUrl.trim() }
       if (messageText.trim()) content.message = messageText
     } else {
-      const cleanButtons = buttons
-        .map((b) => {
-          if (b.type === "web_url") {
-            let cleanUrl = b.url?.trim() || ""
-            if (cleanUrl.startsWith("https://https://")) cleanUrl = cleanUrl.replace("https://https://", "https://")
-            return { type: "web_url" as const, title: b.title, url: cleanUrl }
-          }
-          return { type: "postback" as const, title: b.title, payload: b.payload }
-        })
-        .filter((b) => b.title)
-      content.card = { title: cardTitle, subtitle: cardSubtitle || undefined, image_url: cardImage || undefined, url: cardUrl || undefined, buttons: cleanButtons }
+      // Validated above. Serialize to the canonical stored shape; nothing is
+      // filtered out here, so every configured button reaches the DB and sender.
+      content.card = {
+        title: cardTitle,
+        subtitle: cardSubtitle || undefined,
+        image_url: cardImage || undefined,
+        url: cardUrl || undefined,
+        buttons: serializeCardButtons(buttons),
+      }
     }
 
     const payload = {
@@ -585,12 +610,15 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                       </div>
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between border-b border-border pb-2">
-                          <FieldLabel>Interactive buttons ({buttons.length}/3)</FieldLabel>
-                          <button type="button" onClick={addButton} disabled={buttons.length >= 3}
+                          <FieldLabel>Interactive buttons ({buttons.length}/{MAX_CARD_BUTTONS})</FieldLabel>
+                          <button type="button" onClick={addButton} disabled={buttons.length >= MAX_CARD_BUTTONS}
                             className="font-mono-ui text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40 flex items-center gap-1 transition-colors">
                             <Plus className="w-3 h-3" /> Add button
                           </button>
                         </div>
+                        {buttonError && (
+                          <p role="alert" className="text-[11px] text-red-400">{buttonError}</p>
+                        )}
                         {buttons.map((btn) => (
                           <div key={btn.id} className="flex gap-2 items-center bg-white/[0.02] p-3 rounded-2xl border border-border">
                             <input
@@ -858,11 +886,17 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                             {cardSubtitle && <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 leading-tight">{cardSubtitle}</p>}
                             {cardUrl && <p className="text-[10px] text-[#3797f0] mt-1 truncate">{cardUrl}</p>}
                           </div>
-                          {buttons.filter((b) => b.title).map((b) => (
-                            <div key={b.id} className="border-t border-border py-2 text-center text-[10px] font-bold text-[#3797f0] bg-white/[0.01] cursor-pointer hover:bg-white/[0.03] transition-colors">
-                              {b.title}
-                            </div>
-                          ))}
+                          {buttons.map((b, i) => {
+                            const label = cardButtonPreviewLabel(b, i)
+                            return (
+                              <div
+                                key={b.id}
+                                className={`border-t border-border py-2 text-center text-[10px] font-bold bg-white/[0.01] cursor-pointer hover:bg-white/[0.03] transition-colors ${label.complete ? "text-[#3797f0]" : "text-muted-foreground italic"}`}
+                              >
+                                {label.text}
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                       {type === "media" && (

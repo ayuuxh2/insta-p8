@@ -1,6 +1,3 @@
-/* @ts-nocheck */
-
-import crypto from "crypto"
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { ensureSchema } from "@/lib/supabase-migrate"
@@ -11,37 +8,23 @@ import {
   sendSenderAction,
   replyToComment,
   fetchProfile,
-  verifyIdOwnership,
   sleep,
   isHttpUrl,
   buildFollowGateCard,
 } from "@/lib/instagram-api"
 import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
-import { handleWebhookVerification } from "@/lib/webhook-verify"
+import {
+  handleWebhookVerification,
+  metaAppSecrets,
+  signatureBypassEnabled,
+  verifyMetaSignature,
+} from "@/lib/webhook-verify"
 
 // Reply delivery can legitimately sleep (human-like delays), call the AI provider
 // (15s timeout) and then hit the Graph API. Vercel's default function limit is
 // shorter than that, so a timed-out invocation could drop a reply mid-send.
 export const maxDuration = 60
-
-// Meta signs every webhook POST with HMAC-SHA256 of the raw body. Depending on app setup the
-// signing key is the Instagram app secret or the parent Meta app secret, so accept either.
-const APP_SECRETS = [process.env.INSTAGRAM_APP_SECRET, process.env.META_APP_SECRET].filter(
-  (s): s is string => Boolean(s),
-)
-
-function isValidSignature(rawBody: string, signatureHeader: string | null): boolean {
-  if (APP_SECRETS.length === 0 || !signatureHeader?.startsWith("sha256=")) return false
-  const received = signatureHeader.slice("sha256=".length)
-  return APP_SECRETS.some((secret) => {
-    const expected = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex")
-    return (
-      received.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(received, "utf8"), Buffer.from(expected, "utf8"))
-    )
-  })
-}
 
 const DEFAULT_PUBLIC_REPLIES = ["Check your DMs! 📥", "Sent! 🔥", "Check inbox! ✨"]
 
@@ -205,7 +188,7 @@ function responsePreviewText(content: any): string {
 
 // ============================================================
 // Instagram API Helper: Verifies actual follow status
-// API: GET https://graph.instagram.com/v21.0/{recipientId}?fields=is_user_follow_business
+// API: GET https://graph.instagram.com/v24.0/{recipientId}?fields=is_user_follow_business
 // Returns:
 //   { follows: true, error: undefined }  → confirmed following
 //   { follows: false, error: undefined } → confirmed NOT following
@@ -214,7 +197,11 @@ function responsePreviewText(content: any): string {
 // ============================================================
 async function verifyFollowStatus(igScopedId: string, pageAccessToken: string): Promise<{ follows: boolean | null; error?: 'auth' | 'transient' }> {
   try {
-    const url = `https://graph.instagram.com/v21.0/${igScopedId}?fields=is_user_follow_business&access_token=${pageAccessToken}`
+    // Same API version as every other Graph call in this app. v21.0 was the lone
+    // exception and is past its deprecation window (Meta sunset v21.0 in 2025);
+    // a removed version returns an error, which the gate would treat as transient
+    // and FAIL OPEN — silently delivering gated content.
+    const url = `https://graph.instagram.com/v24.0/${igScopedId}?fields=is_user_follow_business&access_token=${pageAccessToken}`
     // 5s timeout -- Graph API is fast, anything longer means trouble
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
     if (!response.ok) {
@@ -244,6 +231,53 @@ async function verifyFollowStatus(igScopedId: string, pageAccessToken: string): 
 
 // Unlock-attempt counter is in lib/unlock-tracking.ts -- uses Supabase
 // unlock_attempts table so the 3-attempt cap works across Vercel instances.
+
+// ============================================================
+// Idempotency -- Meta retries webhook deliveries
+// Incoming messages are stored under their Meta message id (messages.id), so an
+// already-stored mid means this event was handled before. Without this check a
+// retried delivery sent a second automated reply.
+// Fails OPEN: if the lookup errors we process the event (same as before).
+// ============================================================
+async function alreadyProcessed(supabase: any, mid: string | null | undefined): Promise<boolean> {
+  if (!mid) return false
+  try {
+    const { data, error } = await supabase.from("messages").select("id").eq("id", mid).limit(1)
+    if (error) return false
+    return Array.isArray(data) && data.length > 0
+  } catch {
+    return false
+  }
+}
+
+// ============================================================
+// Atomic webhook-event claim
+// Meta retries deliveries, and two copies of the same event can arrive at the
+// same time on different serverless instances. A SELECT-then-INSERT check races:
+// both requests read "not seen yet" and BOTH reply. So the claim is a single
+// INSERT against webhook_events.event_key, which carries a UNIQUE index. Postgres
+// serialises concurrent inserts on that index: exactly one caller succeeds, every
+// other caller gets 23505 (unique_violation) and must skip the side effects.
+//
+// Fails OPEN on unexpected errors (e.g. the column does not exist before the
+// migration ran, or a transient DB error) so reply delivery keeps working.
+// ============================================================
+async function claimWebhookEvent(supabase: any, eventKey: string | null | undefined): Promise<boolean> {
+  if (!eventKey) return true
+  try {
+    const { error } = await supabase
+      .from("webhook_events")
+      .insert({ event_type: "claim", event_key: eventKey, data: {} })
+    if (!error) return true
+    // 23505 = unique_violation: an earlier or concurrent delivery already owns it.
+    if (error.code === "23505") return false
+    console.warn("[webhook] event claim failed, processing anyway:", error.code ?? error.message)
+    return true
+  } catch (e: any) {
+    console.warn("[webhook] event claim threw, processing anyway:", e?.message)
+    return true
+  }
+}
 
 // ============================================================
 // Audit trail -- sanitized webhook receipt summary
@@ -299,19 +333,16 @@ export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text()
     const signature = request.headers.get("x-hub-signature-256")
-    if (!isValidSignature(rawBody, signature)) {
-      // Hash prefixes are safe to log and let us tell a wrong secret from a mutated body.
-      const computed = APP_SECRETS.map(
-        (s, i) =>
-          `${i === 0 ? "IG" : "META"}:${crypto.createHmac("sha256", s).update(rawBody, "utf8").digest("hex").slice(0, 12)}`,
-      ).join(" ")
+    const secrets = metaAppSecrets()
+    if (!verifyMetaSignature(rawBody, signature, secrets)) {
+      // Diagnostics stay at a safe level: presence / count / length only. No
+      // token, secret, raw header value or signature material is logged.
       console.error(
         `[webhook] 401: ${!signature ? "no x-hub-signature-256 header" : "signature mismatch"}; ` +
-          `secrets configured: ${APP_SECRETS.length}; received=${signature?.slice(7, 19) ?? "-"} computed=[${computed}] bodyLen=${rawBody.length}`,
+          `secrets configured: ${secrets.length}; bodyLen=${rawBody.length}`,
       )
-      if (process.env.DISABLE_WEBHOOK_SIGNATURE_CHECK === "true") {
-        console.warn("[webhook] SIGNATURE CHECK BYPASSED — remove DISABLE_WEBHOOK_SIGNATURE_CHECK after debugging")
-      } else {
+      // The bypass is a development-only escape hatch; it cannot be armed in production.
+      if (!signatureBypassEnabled()) {
         return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
       }
     }
@@ -374,20 +405,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!user) {
-        const { data: allUsers } = await supabase.from("users").select("*")
-        if (allUsers) {
-          for (const candidate of allUsers) {
-            if (!candidate.access_token) continue
-            if (await verifyIdOwnership(candidate.access_token, webhookId)) {
-              await supabase.from("users").update({ page_id: webhookId }).eq("id", candidate.id)
-              user = candidate
-              break
-            }
-          }
-        }
-      }
-
+      // Deliberately NO O(n) scan over every account here. Resolution above is a
+      // direct lookup on the indexed business_account_id / page_id columns, and
+      // Meta guarantees a webhook entry.id equals the /me?fields=user_id value we
+      // store. The old fallback called the Graph API once per account, per event —
+      // an N-call latency spike and a self-inflicted rate-limit risk.
       if (!user) {
         console.log(`[webhook] ❌ Could not resolve user for ID ${webhookId}`)
         continue
@@ -446,6 +468,14 @@ export async function POST(request: NextRequest) {
                     if (parentId && content.include_replies !== true) continue
 
                     console.log(`[webhook] ✅ Comment match: "${match.name}"`)
+
+                    // Meta retries comment deliveries: never reply twice for one comment.
+                    // Atomic claim (not SELECT-then-INSERT) so simultaneous retries
+                    // cannot both send a public reply + DM.
+                    if (!(await claimWebhookEvent(supabase, `comment:${commentId}`))) {
+                      console.log(`[webhook] ↩︎ duplicate comment delivery ignored (${commentId})`)
+                      continue
+                    }
 
                     // reply_mode: 'both' (default) | 'dm_only' | 'public_only'
                     const replyMode = content.reply_mode || "both"
@@ -552,7 +582,7 @@ export async function POST(request: NextRequest) {
           const storyAutomations = automations.filter((a: any) => a.trigger_source === "story")
           if (storyAutomations.length === 0) continue
 
-          let match = null
+          let match: any = null
           let storyMediaId: string | null = null
 
           if (event.message?.attachments?.[0]?.type === "story_mention") {
@@ -592,6 +622,13 @@ export async function POST(request: NextRequest) {
           }
 
           if (match) {
+                                          // Story deliveries are retried too. Claim before any send so a
+                                          // concurrent duplicate cannot deliver the automation twice.
+                                          const storyKey = `story:${event.message?.mid ?? event.reaction?.mid ?? ""}:${senderId}:${event.timestamp ?? ""}`
+                                          if (!(await claimWebhookEvent(supabase, storyKey))) {
+                                            console.log(`[webhook] ↩︎ duplicate story delivery ignored (${storyKey})`)
+                                            continue
+                                          }
                                           console.log(`[webhook] ✨ Story match: "${match.name}"`)
                                           const content = parseContent(match.response_content)
 
@@ -653,10 +690,32 @@ export async function POST(request: NextRequest) {
 
           console.log(`[webhook] 📩 DM from ${senderId}: "${triggerValue}"`)
 
+          // Meta retries deliveries; never reply twice for the same message id.
+          const mid = event.message?.mid
+          if (await alreadyProcessed(supabase, mid)) {
+            console.log(`[webhook] ↩︎ duplicate delivery ignored (mid=${mid})`)
+            continue
+          }
+
+          // Atomic claim for the concurrent case: a retry landing while this delivery
+          // is still being processed must not send a second reply. Postbacks carry no
+          // mid, so fall back to a stable key (payload id, or sender+payload+timestamp).
+          const eventKey = mid
+            ? `mid:${mid}`
+            : event.postback?.mid
+              ? `postback:${event.postback.mid}`
+              : triggerType === "postback"
+                ? `postback:${senderId}:${triggerValue}:${event.timestamp ?? ""}`
+                : null
+          if (!(await claimWebhookEvent(supabase, eventKey))) {
+            console.log(`[webhook] ↩︎ duplicate delivery ignored (key=${eventKey})`)
+            continue
+          }
+
           // Inbox bookkeeping runs alongside delivery, not ahead of it. Always
           // joined below so serverless shutdown cannot discard pending writes.
           const incomingSaved = (async () => {
-          let conv = null
+          let conv: any = null
           try {
             const { data: existing } = await supabase
               .from("conversations")
@@ -709,7 +768,7 @@ export async function POST(request: NextRequest) {
           try {
           // ---------- Match automation ----------
                     const dmAutomations = automations.filter((a: any) => a.trigger_source === "dm" || !a.trigger_source)
-                    let match = null
+                    let match: any = null
 
                     const isUnlockEvent = triggerType === "postback" && triggerValue.startsWith("UNLOCK_CONTENT_")
 

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireUser } from "@/lib/api-auth"
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,6 +10,9 @@ export async function POST(request: NextRequest) {
         if (!userId || !recipientId || (!message && !attachment)) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
         }
+
+        const denied = requireUser(request, userId)
+        if (denied) return denied
 
         const supabase = await getSupabaseServerClient()
 
@@ -44,9 +48,15 @@ export async function POST(request: NextRequest) {
 
         const data = await res.json()
 
-        if (data.error) {
-            console.error("[Inbox Send] Instagram API Error:", data.error)
-            return NextResponse.json({ error: data.error.message }, { status: 500 })
+        // A completed fetch() is not a delivered message: Meta signals failure with a
+        // non-2xx status and/or an `error` object in the body.
+        if (!res.ok || data?.error) {
+            const meta = data?.error
+            console.error(
+                `[Inbox Send] Instagram rejected the message: HTTP ${res.status}` +
+                    (meta ? ` type=${meta.type ?? "-"} code=${meta.code ?? "-"} message=${meta.message ?? "-"}` : ""),
+            )
+            return NextResponse.json({ error: meta?.message || "Failed to send message" }, { status: 502 })
         }
 
         // 4. Log to Database (Outbound Message)

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireUser } from "@/lib/api-auth"
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,6 +8,9 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("userId")
 
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+
+    const denied = requireUser(request, userId)
+    if (denied) return denied
 
     const supabase = await getSupabaseServerClient()
 
@@ -24,15 +28,16 @@ export async function GET(request: NextRequest) {
     // 2. Fetch Media (Smart Method: /me/media)
     // Ye 'instagram.com' use karega jo aapke token ke saath compatible hai.
     // Hum '/me' use kar rahe hain taaki ID mismatch ka lafda hi na ho.
-    const url = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${user.access_token}`
+    const url = `https://graph.instagram.com/v24.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${encodeURIComponent(user.access_token)}`
 
-    console.log("[v0] Fetching Media from:", url)
-
+    // Never log this URL: it carries the access token. Log status + Meta's error fields instead.
     const res = await fetch(url, { cache: 'no-store' })
     const data = await res.json()
 
-    if (data.error) {
-      console.error("[v0] Instagram Media Error:", data.error)
+    if (!res.ok || data?.error) {
+      console.error(
+        `[instagram/media] fetch failed: HTTP ${res.status} code=${data?.error?.code ?? "-"} message=${data?.error?.message ?? "-"}`,
+      )
       // Agar Token Invalid hai, to user ko Logout karne bolenge frontend pe
       if (data.error.code === 190) {
          return NextResponse.json({ error: "Session Expired. Please Logout & Login." }, { status: 401 })

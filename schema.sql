@@ -5,8 +5,9 @@
 --
 -- Auto-migration scope (lib/supabase-migrate.ts handles on every cold start):
 --   * CREATE TABLE IF NOT EXISTS
---   * CREATE INDEX IF NOT EXISTS
+--   * CREATE [UNIQUE] INDEX IF NOT EXISTS
 --   * CREATE EXTENSION IF NOT EXISTS
+--   * ALTER TABLE ... ADD COLUMN IF NOT EXISTS
 --
 -- Manual one-time setup (apply via Supabase SQL editor -- anon role required):
 --   * CREATE POLICY (RLS)
@@ -70,14 +71,35 @@ CREATE TABLE IF NOT EXISTS public.messages (
 
 -- ==========================================
 -- 4. Table: public.webhook_events
+-- Two roles in one table:
+--   * audit trail  -> event_type = the Meta object, event_key NULL
+--   * idempotency  -> event_type = 'claim', event_key = stable delivery identity
+-- The unique index on event_key is what makes "process this delivery at most
+-- once" atomic: a concurrent duplicate INSERT fails with 23505 instead of racing
+-- a SELECT-then-INSERT check.
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.webhook_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type TEXT NOT NULL,
   user_id BIGINT,
+  event_key TEXT,
   data JSONB,
   processed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Installs created before event_key existed: idempotent, part of auto-migration scope.
+ALTER TABLE public.webhook_events ADD COLUMN IF NOT EXISTS event_key TEXT;
+
+-- At-most-once processing for external deliveries (message mid, comment id, story
+-- id, postback identity). NULL keys are the audit rows and stay unconstrained.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_events_event_key
+  ON public.webhook_events(event_key)
+  WHERE event_key IS NOT NULL;
+
+-- Direct account resolution for incoming webhooks: users lookup by the Instagram
+-- professional account id (webhook entry.id) without scanning every account.
+CREATE INDEX IF NOT EXISTS idx_users_business_account_id ON public.users(business_account_id);
+CREATE INDEX IF NOT EXISTS idx_users_page_id ON public.users(page_id);
 
 -- ==========================================
 -- 5. Table: public.automations

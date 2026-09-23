@@ -13,7 +13,7 @@ async function test(matched, profileFails = false) {
   const db = { from(table) {
     let inserted
     const query = {
-      select() { return this }, eq() { return this }, or() { return this },
+      select() { return this }, eq() { return this }, or() { return this }, limit() { return this },
       update() { return this }, insert(row) { inserted = row; return this },
       single() { return this },
       then(resolve, reject) {
@@ -38,7 +38,13 @@ async function test(matched, profileFails = false) {
       isHttpUrl: v => typeof v === 'string' && /^https?:\/\//i.test(v),
     },
     '@/lib/ai-reply': {}, '@/lib/unlock-tracking': { unlockKey: () => 'key' },
-    '@/lib/webhook-verify': { handleWebhookVerification: () => ({}), isMetaWebhookDelivery: () => false },
+    '@/lib/webhook-verify': {
+      handleWebhookVerification: () => ({}),
+      isMetaWebhookDelivery: () => false,
+      metaAppSecrets: () => ['test-secret'],
+      verifyMetaSignature: (raw, sig) => typeof sig === 'string' && sig.startsWith('sha256='),
+      signatureBypassEnabled: () => false,
+    },
   }
   process.env.INSTAGRAM_APP_SECRET = 'test-secret'
   const module = { exports: {} }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { serializeSession, sessionCookieOptions, sessionSecretProblem } from "@/lib/api-auth"
 import { handleWebhookVerification, isMetaWebhookDelivery } from "@/lib/webhook-verify"
 // Reuse the real Instagram webhook processor. Importing the route module keeps a
 // single source of truth for event handling instead of duplicating it here.
@@ -61,6 +62,15 @@ export async function POST(request: NextRequest) {
           body: rawBody,
         }),
       )
+    }
+
+    // Fail before touching Instagram / the database when this deployment cannot
+    // issue a trustworthy session. Minting an unsigned cookie would be worse
+    // than a clear error, so this is a hard stop.
+    const sessionProblem = sessionSecretProblem()
+    if (sessionProblem) {
+      console.error(`[callback] refusing login: ${sessionProblem}`)
+      return NextResponse.json({ error: "Server session is not configured" }, { status: 500 })
     }
 
     let body: any
@@ -163,12 +173,8 @@ export async function POST(request: NextRequest) {
     if (upsertError) throw upsertError
 
     const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
-    response.cookies.set("insta_session", JSON.stringify({ username, userId: loginUserId }), {
-      path: "/",
-      maxAge: expiresIn,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    })
+    const { name, ...cookieOptions } = sessionCookieOptions(expiresIn)
+    response.cookies.set(name, serializeSession({ username, userId: loginUserId }), cookieOptions)
     return response
 
   } catch (error: any) {
