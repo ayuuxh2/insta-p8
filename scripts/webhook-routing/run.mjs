@@ -23,6 +23,7 @@ const cb = await import(new URL("../../app/api/instagram/callback/route.ts", imp
 const wh = await import(new URL("../../app/api/instagram/webhook/route.ts", import.meta.url).href)
 const autos = await import(new URL("../../app/api/automations/route.ts", import.meta.url).href)
 const session = await import(new URL("../../app/api/session/route.ts", import.meta.url).href)
+const media = await import(new URL("../../app/api/instagram/media/route.ts", import.meta.url).href)
 // Real modules (no stubs involved) so these paths are genuinely exercised.
 const realIg = await import(new URL("../../lib/instagram-api.ts", import.meta.url).href)
 const auth = await import(new URL("../../lib/api-auth.ts", import.meta.url).href)
@@ -1023,6 +1024,118 @@ const commentGateRule = () => [
     assert.equal(res.status, 200)
     assert.equal(state.cardSent, 0)
     assert.equal(state.sent, 1)
+  })
+}
+
+// ============================================================
+// MEDIA FETCH — normalized /me/media errors + safe logging
+// ============================================================
+const mediaReq = () =>
+  fakeRequest({ url: "https://x/api/instagram/media?userId=256123", session: SESSION })
+
+function stubMediaFetch(response) {
+  global.fetch = async () => response
+}
+
+// M1. success -> image_url normalized from media_url/thumbnail_url
+{
+  stubMediaFetch({
+    ok: true,
+    status: 200,
+    json: async () => ({ data: [{ id: "m1", media_type: "IMAGE", media_url: "https://cdn/img.jpg" }] }),
+  })
+  const res = await media.GET(mediaReq())
+  check("M1 media success -> image_url normalized", () => {
+    assert.equal(res.status, 200)
+    assert.equal(res._json.data[0].image_url, "https://cdn/img.jpg")
+  })
+}
+
+// M2. code 200 "API access blocked" -> clear normalized error, not opaque 500,
+// and does NOT tell the user to reconnect (the token is not the problem).
+{
+  stubMediaFetch({
+    ok: false,
+    status: 400,
+    headers: new Headers({ "www-authenticate": 'OAuth "Facebook Platform" "access_denied" "API access blocked."' }),
+    json: async () => ({
+      error: {
+        message: "API access blocked.",
+        type: "OAuthException",
+        code: 200,
+        error_subcode: 458,
+        fbtrace_id: "trace-media",
+      },
+    }),
+  })
+  const res = await media.GET(mediaReq())
+  check("M2 code 200 access blocked -> INSTAGRAM_MEDIA_ACCESS_BLOCKED, no reauth prompt", () => {
+    assert.equal(res.status, 403)
+    assert.equal(res._json.normalized.type, "INSTAGRAM_MEDIA_ACCESS_BLOCKED")
+    assert.equal(res._json.normalized.retryable, false)
+    assert.equal(res._json.normalized.requiresReauthorization, false)
+    assert.equal(res._json.normalized.subcode, 458)
+  })
+}
+
+// M3. code 190 (expired token) -> 401 and reauthorization IS required
+{
+  stubMediaFetch({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: { message: "Session has expired", type: "OAuthException", code: 190, fbtrace_id: "t" } }),
+  })
+  const res = await media.GET(mediaReq())
+  check("M3 code 190 -> INSTAGRAM_MEDIA_SESSION_EXPIRED, reauth required, 401", () => {
+    assert.equal(res.status, 401)
+    assert.equal(res._json.normalized.type, "INSTAGRAM_MEDIA_SESSION_EXPIRED")
+    assert.equal(res._json.normalized.requiresReauthorization, true)
+  })
+}
+
+// M4. a non-JSON error body must not crash into an opaque failure
+{
+  stubMediaFetch({
+    ok: false,
+    status: 400,
+    json: async () => {
+      throw new Error("not json")
+    },
+  })
+  const res = await media.GET(mediaReq())
+  check("M4 non-JSON error body -> normalized error, no crash", () => {
+    assert.equal(res.status, 500)
+    assert.equal(res._json.normalized.type, "INSTAGRAM_MEDIA_ERROR")
+  })
+}
+
+// M5. the access token never reaches the logs
+{
+  const originalToken = state.user.access_token
+  state.user.access_token = "SECRET_TOKEN_XYZ"
+  const logs = []
+  const origLog = console.log
+  const origErr = console.error
+  const capture = (...args) =>
+    logs.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "))
+  console.log = capture
+  console.error = capture
+  try {
+    stubMediaFetch({
+      ok: false,
+      status: 400,
+      headers: new Headers({ "www-authenticate": "OAuth access_denied" }),
+      json: async () => ({ error: { message: "API access blocked.", type: "OAuthException", code: 200, fbtrace_id: "t" } }),
+    })
+    await media.GET(mediaReq())
+  } finally {
+    console.log = origLog
+    console.error = origErr
+    state.user.access_token = originalToken
+  }
+  check("M5 media logs never contain the access token", () => {
+    assert.ok(logs.length > 0, "the route must log diagnostics")
+    assert.ok(!logs.some((l) => l.includes("SECRET_TOKEN_XYZ")), "token must never be logged")
   })
 }
 
