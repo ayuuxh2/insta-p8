@@ -188,44 +188,118 @@ function responsePreviewText(content: any): string {
 
 // ============================================================
 // Instagram API Helper: Verifies actual follow status
-// API: GET https://graph.instagram.com/v24.0/{recipientId}?fields=is_user_follow_business
-// Returns:
-//   { follows: true, error: undefined }  → confirmed following
-//   { follows: false, error: undefined } → confirmed NOT following
-//   { follows: null, error: 'auth' } → auth/permission failure (401, 403) — fail CLOSED
-//   { follows: null, error: 'transient' } → transient failure (5xx, timeout) — fail OPEN
+// API: GET https://graph.instagram.com/v24.0/{IGSID}?fields=is_user_follow_business
+//
+// `is_user_follow_business` belongs to the Instagram User Profile API, which
+// requires *user consent*. Per Meta, consent is set only when the user sends a
+// message, clicks an icebreaker, or opens the persistent menu. A commenter who
+// has never messaged the account therefore gets Meta error code 230
+// ("User consent is required to access user profile"). That is a normal API
+// state — NOT evidence that the user does not follow the account.
+//
+// Three-state result:
+//   FOLLOWS         → Instagram explicitly returned is_user_follow_business: true
+//   DOES_NOT_FOLLOW → Instagram explicitly returned is_user_follow_business: false
+//   UNKNOWN         → consent/auth/permission/transient error, or an inconclusive
+//                     payload. Never collapse UNKNOWN into DOES_NOT_FOLLOW.
 // ============================================================
-async function verifyFollowStatus(igScopedId: string, pageAccessToken: string): Promise<{ follows: boolean | null; error?: 'auth' | 'transient' }> {
+type FollowStatus = "FOLLOWS" | "DOES_NOT_FOLLOW" | "UNKNOWN"
+type FollowUnknownReason = "consent" | "auth" | "transient" | "malformed"
+interface FollowCheckResult {
+  status: FollowStatus
+  reason?: FollowUnknownReason
+}
+
+async function verifyFollowStatus(
+  igScopedId: string,
+  igAccessToken: string,
+  event: "comment" | "story" | "dm" | "dm-unlock",
+): Promise<FollowCheckResult> {
+  // Never log the access token: only the IGSID and the triggering event.
+  console.log(`[follow-gate] Checking follow status userId=${igScopedId} event=${event}`)
   try {
     // Same API version as every other Graph call in this app. v21.0 was the lone
     // exception and is past its deprecation window (Meta sunset v21.0 in 2025);
     // a removed version returns an error, which the gate would treat as transient
     // and FAIL OPEN — silently delivering gated content.
-    const url = `https://graph.instagram.com/v24.0/${igScopedId}?fields=is_user_follow_business&access_token=${pageAccessToken}`
+    //
+    // Token type: Instagram user access token (Instagram Login) — the token type
+    // the User Profile API requires, NOT a Facebook Page token.
+    // ID type: the Instagram-scoped ID (IGSID) taken from the webhook payload.
+    const url =
+      `https://graph.instagram.com/v24.0/${encodeURIComponent(igScopedId)}` +
+      `?fields=is_user_follow_business&access_token=${encodeURIComponent(igAccessToken)}`
+
     // 5s timeout -- Graph API is fast, anything longer means trouble
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`[webhook] Follow status check failed: ${response.status} ${errorText}`)
-      // Distinguish auth failures (fail closed) from transient (fail open)
-      if (response.status === 401 || response.status === 403) {
-        return { follows: null, error: 'auth' }
+      // Read Meta's error body to tell a consent state apart from a transient
+      // outage, but never log the raw body — only code/type/message.
+      let errorBody: any = null
+      try {
+        errorBody = JSON.parse(await response.text())
+      } catch {
+        // Non-JSON body: fall through with the HTTP status only.
       }
-      // 5xx, 429, network timeout, etc. → transient, fail open
-      return { follows: null, error: 'transient' }
+      const meta = errorBody?.error ?? null
+      const code = meta?.code
+
+      // 230 = "User consent is required to access user profile". Expected when a
+      // commenter has not messaged the account. The follow status is unknowable,
+      // NOT false.
+      if (code === 230) {
+        console.warn(
+          `[follow-gate] API result: UNKNOWN (userId=${igScopedId}) ` +
+            `Instagram error code=230: user consent required`,
+        )
+        return { status: "UNKNOWN", reason: "consent" }
+      }
+
+      // 401/403 is an auth/permission failure: fail CLOSED (unchanged behaviour).
+      // Still not evidence about following — it is UNKNOWN, not DOES_NOT_FOLLOW.
+      if (response.status === 401 || response.status === 403) {
+        console.warn(
+          `[follow-gate] API result: UNKNOWN (userId=${igScopedId}) ` +
+            `Instagram auth/permission error http=${response.status} code=${code ?? "-"}`,
+        )
+        return { status: "UNKNOWN", reason: "auth" }
+      }
+
+      // Any other error (5xx, 429, timeout, missing permission, ...) is transient:
+      // fail OPEN so an API/availability problem never blocks the automation.
+      console.warn(
+        `[follow-gate] API result: UNKNOWN (userId=${igScopedId}) ` +
+          `Instagram API error http=${response.status} code=${code ?? "-"} type=${meta?.type ?? "-"}`,
+      )
+      return { status: "UNKNOWN", reason: "transient" }
     }
+
     const data = await response.json()
-    const follows = data.is_user_follow_business === true
-    console.log(`[webhook] Follow check for ${igScopedId}: is_user_follow_business=${data.is_user_follow_business} => ${follows ? "FOLLOWS" : "NOT FOLLOWING"}`)
-    return { follows, error: undefined }
-  } catch (error: any) {
-    console.error("[webhook] Error checking follow status:", error)
-    // AbortSignal.timeout throws AbortError/TimeoutError -- both are transient
-    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
-      return { follows: null, error: 'transient' }
+    const value = data?.is_user_follow_business
+    if (value === true) {
+      console.log(`[follow-gate] API result: FOLLOWS (userId=${igScopedId})`)
+      return { status: "FOLLOWS" }
     }
-    // Network error → transient, fail open
-    return { follows: null, error: 'transient' }
+    if (value === false) {
+      console.log(`[follow-gate] API result: DOES_NOT_FOLLOW (userId=${igScopedId})`)
+      return { status: "DOES_NOT_FOLLOW" }
+    }
+    // A 200 without a boolean field is inconclusive, not a "no". Treating it as
+    // DOES_NOT_FOLLOW previously showed "You don't follow us" to valid users.
+    console.warn(
+      `[follow-gate] API result: UNKNOWN (userId=${igScopedId}) is_user_follow_business missing from response`,
+    )
+    return { status: "UNKNOWN", reason: "malformed" }
+  } catch (error: any) {
+    // AbortSignal.timeout throws AbortError/TimeoutError; any other throw is a
+    // network error. Both are transient and must never surface as a 500.
+    const timedOut = error?.name === "AbortError" || error?.name === "TimeoutError"
+    console.warn(
+      `[follow-gate] API result: UNKNOWN (userId=${igScopedId}) ` +
+        `${timedOut ? "request timed out" : "network error"}`,
+    )
+    return { status: "UNKNOWN", reason: "transient" }
   }
 }
 
@@ -494,9 +568,9 @@ export async function POST(request: NextRequest) {
                     // alone won't open a DM with someone who has never messaged the account; private
                     // replies to a comment need comment_id.
                     if (content.check_follow === true) {
-                      const followResult = await verifyFollowStatus(senderId, user.access_token)
+                      const followResult = await verifyFollowStatus(senderId, user.access_token, "comment")
 
-                      if (followResult.follows === true) {
+                      if (followResult.status === "FOLLOWS") {
                         console.log(`[webhook] ✅ Comment follower gate: @${senderId} follows @${user.username} — sending content`)
                         if (replyMode !== "dm_only") {
                           await replyToComment(user.access_token, commentId, getPublicReply())
@@ -509,7 +583,7 @@ export async function POST(request: NextRequest) {
                             { skipTyping: true },
                           )
                         }
-                      } else if (followResult.follows === false) {
+                      } else if (followResult.status === "DOES_NOT_FOLLOW") {
                         console.log(`[webhook] 🔒 Comment follower gate: @${senderId} doesn't follow @${user.username}`)
                         if (replyMode !== "dm_only") {
                           await replyToComment(user.access_token, commentId, getPublicReply())
@@ -522,8 +596,9 @@ export async function POST(request: NextRequest) {
                           )
                         }
                       } else {
-                        // null → unverifiable. Distinguish auth vs transient.
-                        const isAuthError = followResult.error === 'auth'
+                        // UNKNOWN → unverifiable. Auth/permission errors fail CLOSED; consent,
+                        // transient and malformed results fail OPEN (never a false "no").
+                        const isAuthError = followResult.reason === "auth"
                         if (isAuthError) {
                           // Auth/permission failure — fail CLOSED: send gate card
                           console.warn(`[webhook] ⚠️ Comment follower gate auth failure for @${senderId}; sending gate`)
@@ -633,17 +708,18 @@ export async function POST(request: NextRequest) {
                                           const content = parseContent(match.response_content)
 
                                           if (content.check_follow === true) {
-                                            const followResult = await verifyFollowStatus(senderId, user.access_token)
+                                            const followResult = await verifyFollowStatus(senderId, user.access_token, "story")
 
-                                            if (followResult.follows === true) {
+                                            if (followResult.status === "FOLLOWS") {
                                               console.log(`[webhook] ✅ Story follower gate: @${senderId} follows @${user.username} — sending content`)
                                               await sendAutomationResponse(user.access_token, { id: senderId }, content)
-                                            } else if (followResult.follows === false) {
+                                            } else if (followResult.status === "DOES_NOT_FOLLOW") {
                                               console.log(`[webhook] 🔒 Story follower gate: @${senderId} doesn't follow @${user.username}`)
                                               await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id }))
                                             } else {
-                                              // null → unverifiable. Distinguish auth vs transient.
-                                              const isAuthError = followResult.error === 'auth'
+                                              // UNKNOWN → unverifiable. Auth/permission errors fail CLOSED;
+                                              // consent, transient and malformed results fail OPEN.
+                                              const isAuthError = followResult.reason === "auth"
                                               if (isAuthError) {
                                                 // Auth failure — fail CLOSED: send gate
                                                 console.warn(`[webhook] ⚠️ Story follower gate auth failure for @${senderId}; sending gate`)
@@ -862,9 +938,9 @@ export async function POST(request: NextRequest) {
                         // Explicit unlock path: user tapped "I Followed!" — re-verify before delivering.
                         // Rate-limit gate cards on unverifiable results; after N attempts, send a single
                         // "we couldn't verify" message and stop responding for this sender+rule.
-                        const followResult = await verifyFollowStatus(senderId, user.access_token)
+                        const followResult = await verifyFollowStatus(senderId, user.access_token, "dm-unlock")
 
-                        if (followResult.follows === true) {
+                        if (followResult.status === "FOLLOWS") {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ✅ DM unlock verified for @${senderId}`)
                           const result = await sendAutomationResponse(user.access_token, { id: senderId }, content)
@@ -884,7 +960,7 @@ export async function POST(request: NextRequest) {
                               console.error("[webhook] Failed to save outgoing message", e)
                             }
                           }
-                        } else if (followResult.follows === false) {
+                        } else if (followResult.status === "DOES_NOT_FOLLOW") {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ❌ DM unlock rejected: @${senderId} still doesn't follow`)
                           const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, title: "❌ Not Following Yet!", subtitle: `We couldn't verify your follow. Please follow @${user.username} and click the button again.` }))
@@ -905,7 +981,8 @@ export async function POST(request: NextRequest) {
                             }
                           }
                         } else {
-                                                  // null → unverifiable. Cap the loop.
+                                                  // UNKNOWN → unverifiable. Cap the retry loop so a consent/auth
+                                                  // problem cannot spam the gate card indefinitely.
                                                   const attempts = await bumpUnlockAttempt(attemptKey)
                                                   if (attempts > UNLOCK_GATE_MAX_ATTEMPTS) {
                                                     await clearUnlockAttempts(attemptKey)
@@ -954,9 +1031,9 @@ export async function POST(request: NextRequest) {
                                                 }
                                               } else {
                                                 // Initial keyword/postback (not the unlock event) — verify once before locking
-                                                const followResult = await verifyFollowStatus(senderId, user.access_token)
+                                                const followResult = await verifyFollowStatus(senderId, user.access_token, "dm")
 
-                                                if (followResult.follows === true) {
+                                                if (followResult.status === "FOLLOWS") {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ✅ DM follower gate: @${senderId} follows @${user.username} — sending content`)
                           const result = await sendAutomationResponse(user.access_token, { id: senderId }, content)
@@ -976,7 +1053,7 @@ export async function POST(request: NextRequest) {
                               console.error("[webhook] Failed to save outgoing message", e)
                             }
                           }
-                        } else if (followResult.follows === false) {
+                        } else if (followResult.status === "DOES_NOT_FOLLOW") {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] 🔒 DM follower gate: @${senderId} doesn't follow @${user.username}`)
                           const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` }))
@@ -997,10 +1074,10 @@ export async function POST(request: NextRequest) {
                             }
                           }
                         } else {
-                          // null → unverifiable. Distinguish auth vs transient. Auth fail-CLOSED:
-                          // send gate, don't deliver content (matches comment/story branches).
-                          // Only transient 5xx/timeouts fail OPEN and deliver content.
-                          const isAuthError = followResult.error === 'auth'
+                          // UNKNOWN → unverifiable. Auth/permission errors fail CLOSED: send the
+                          // gate, don't deliver content (matches comment/story branches). Consent,
+                          // transient and malformed results fail OPEN and deliver content.
+                          const isAuthError = followResult.reason === "auth"
                           if (isAuthError) {
                             console.warn(`[webhook] ⚠️ DM follower gate auth failure for @${senderId}; sending gate`)
                             const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, title: "❌ Verification Failed", subtitle: `We can't verify your follow status. Please follow @${user.username} and try again.` }))

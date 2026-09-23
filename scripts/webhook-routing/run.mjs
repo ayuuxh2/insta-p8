@@ -848,6 +848,184 @@ const postRule = (body) =>
   })
 }
 
+// ============================================================
+// FOLLOW GATE — three-state result: FOLLOWS / DOES_NOT_FOLLOW / UNKNOWN
+// A commenter with no messaging consent gets Meta code 230; that must map to
+// UNKNOWN (never a false "does not follow", never an HTTP 500).
+// ============================================================
+function commentDelivery(text, { commentId = "c_follow", from = "ig_commenter", media = "media_follow", parentId = null } = {}) {
+  return JSON.stringify({
+    object: "instagram",
+    entry: [
+      {
+        id: IG_ID,
+        time: 1,
+        changes: [
+          { field: "comments", value: { id: commentId, text, from: { id: from }, media: { id: media }, parent_id: parentId } },
+        ],
+      },
+    ],
+  })
+}
+
+function stubFollowResponse(payload) {
+  global.fetch = async () => ({ ok: true, json: async () => payload })
+}
+
+function stubConsentError() {
+  global.fetch = async () => ({
+    ok: false,
+    status: 500,
+    text: async () =>
+      JSON.stringify({
+        error: {
+          message: "User consent is required to access user profile",
+          type: "IGApiException",
+          code: 230,
+          fbtrace_id: "trace",
+        },
+      }),
+  })
+}
+
+const commentGateRule = () => [
+  {
+    id: "gate1",
+    user_id: "256123",
+    name: "Comment gate",
+    trigger_source: "comment",
+    trigger_type: "keyword",
+    trigger_value: "link",
+    response_content: { message: "Here is your link", check_follow: true },
+    is_active: true,
+  },
+]
+
+// W1. Instagram explicitly says the user follows -> deliver content.
+{
+  state.automations = commentGateRule()
+  state.sent = 0
+  state.cardSent = 0
+  state.commentReplies = 0
+  const raw = commentDelivery("link", { commentId: "c_follows" })
+  stubFollowResponse({ is_user_follow_business: true })
+  const res = await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W1 comment gate FOLLOWS -> content delivered, no gate card", () => {
+    assert.equal(res.status, 200)
+    assert.equal(state.sent, 1)
+    assert.equal(state.cardSent, 0)
+  })
+}
+
+// W2. Instagram explicitly says the user does not follow -> gate card only.
+{
+  state.automations = commentGateRule()
+  state.sent = 0
+  state.cardSent = 0
+  const raw = commentDelivery("link", { commentId: "c_notfollow" })
+  stubFollowResponse({ is_user_follow_business: false })
+  const res = await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W2 comment gate DOES_NOT_FOLLOW -> gate card, no content", () => {
+    assert.equal(res.status, 200)
+    assert.equal(state.cardSent, 1)
+    assert.equal(state.sent, 0)
+  })
+}
+
+// W3. Meta code 230 (commenter has no messaging consent) -> UNKNOWN, never a 500
+// and never the "you don't follow us" gate. The flow continues (fails open).
+{
+  state.automations = commentGateRule()
+  state.sent = 0
+  state.cardSent = 0
+  const raw = commentDelivery("link", { commentId: "c_consent" })
+  stubConsentError()
+  const res = await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W3 code 230 -> UNKNOWN: HTTP 200, content delivered, no false not-following gate", () => {
+    assert.equal(res.status, 200)
+    assert.equal(state.sent, 1, "content must still be delivered")
+    assert.equal(state.cardSent, 0, "must not send the doesn't-follow gate card")
+  })
+}
+
+// W4. HTTP 200 with no boolean field is inconclusive -> UNKNOWN, not DOES_NOT_FOLLOW.
+{
+  state.automations = commentGateRule()
+  state.sent = 0
+  state.cardSent = 0
+  const raw = commentDelivery("link", { commentId: "c_malformed" })
+  stubFollowResponse({})
+  await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W4 200 without is_user_follow_business -> UNKNOWN, not a false not-following", () => {
+    assert.equal(state.cardSent, 0)
+    assert.equal(state.sent, 1)
+  })
+}
+
+// W5. check_follow disabled -> no follow-status API call at all.
+{
+  state.automations = [
+    {
+      ...commentGateRule()[0],
+      id: "nogate",
+      response_content: { message: "Open content", check_follow: false },
+    },
+  ]
+  state.sent = 0
+  state.cardSent = 0
+  let fetchCalls = 0
+  global.fetch = async () => {
+    fetchCalls++
+    return { ok: true, json: async () => ({}) }
+  }
+  const raw = commentDelivery("link", { commentId: "c_nogate" })
+  await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W5 check_follow disabled -> no follow-status API call", () => {
+    assert.equal(fetchCalls, 0)
+    assert.equal(state.sent, 1)
+  })
+}
+
+// W6. User with an established DM context (Situation B) -> FOLLOWS delivers content.
+{
+  state.automations = [
+    {
+      id: "dmgate",
+      user_id: "256123",
+      name: "DM gate",
+      trigger_source: "dm",
+      trigger_type: "keyword",
+      trigger_value: "vip",
+      response_content: { message: "VIP content", check_follow: true },
+      is_active: true,
+    },
+  ]
+  state.sent = 0
+  state.cardSent = 0
+  const raw = delivery("vip", "m_follow_dm")
+  stubFollowResponse({ is_user_follow_business: true })
+  const res = await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W6 DM gate FOLLOWS -> content delivered", () => {
+    assert.equal(res.status, 200)
+    assert.equal(state.sent, 1)
+    assert.equal(state.cardSent, 0)
+  })
+}
+
+// W7. DM gate consent error -> UNKNOWN fail-open, no gate card, HTTP 200.
+{
+  state.sent = 0
+  state.cardSent = 0
+  const raw = delivery("vip", "m_consent_dm")
+  stubConsentError()
+  const res = await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  check("W7 DM gate code 230 -> UNKNOWN: HTTP 200, no gate card", () => {
+    assert.equal(res.status, 200)
+    assert.equal(state.cardSent, 0)
+    assert.equal(state.sent, 1)
+  })
+}
+
 console.log(results.join("\n"))
 const failed = results.filter((r) => r.startsWith("FAIL"))
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
