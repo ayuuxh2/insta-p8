@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/api-auth"
+import { redactSecrets } from "@/lib/redact"
 
 export async function POST(request: NextRequest) {
     try {
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
         // 3. Send to Instagram
         const res = await fetch(
-            `https://graph.instagram.com/v24.0/me/messages?access_token=${user.access_token}`,
+            `https://graph.instagram.com/v24.0/me/messages?access_token=${encodeURIComponent(user.access_token)}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -92,7 +93,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, data })
 
     } catch (error) {
-        console.error("[Inbox Send] Internal Error:", error)
+        // The failed request URL carries the access token; redact before logging.
+        console.error("[Inbox Send] Internal Error:", redactSecrets(error))
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
     }
 }

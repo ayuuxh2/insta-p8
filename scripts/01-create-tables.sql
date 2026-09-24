@@ -1,12 +1,22 @@
--- Create users table to store Instagram accounts
+-- Create users table to store Instagram accounts.
+-- business_account_id / page_id are part of the table (not only of schema.sql)
+-- because indexes further down reference them; a fresh run of this script must
+-- create the columns before those indexes.
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
   access_token TEXT NOT NULL,
   token_expires_at TIMESTAMP WITH TIME ZONE,
+  business_account_id BIGINT,
+  page_id TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Installs created before these columns existed: add them idempotently, before
+-- any index below needs them.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS business_account_id BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS page_id TEXT;
 
 -- Create conversations table to store DM threads
 CREATE TABLE IF NOT EXISTS conversations (
@@ -59,10 +69,15 @@ CREATE TABLE IF NOT EXISTS automations (
   specific_media_id TEXT DEFAULT NULL,
   response_type TEXT DEFAULT 'pro',
   response_content JSONB NOT NULL,
+  trigger_source TEXT NOT NULL DEFAULT 'comment',
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Same reasoning as users above: indexes reference these columns, so they must
+-- exist for installs created before the columns were introduced.
+ALTER TABLE automations ADD COLUMN IF NOT EXISTS trigger_source TEXT NOT NULL DEFAULT 'comment';
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);

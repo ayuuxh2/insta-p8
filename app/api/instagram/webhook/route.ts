@@ -14,6 +14,7 @@ import {
 } from "@/lib/instagram-api"
 import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
+import { redactSecrets } from "@/lib/redact"
 import {
   handleWebhookVerification,
   metaAppSecrets,
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
 // ============================================================
 // Content parsing — response_content may be object or JSON string
 // ============================================================
+/** `response_content` is JSONB but legacy rows stored it as a JSON string. */
 function parseContent(raw: any) {
   if (!raw) return {}
   if (typeof raw === "string") {
@@ -52,10 +54,16 @@ function parseContent(raw: any) {
   return raw
 }
 
+/** Pick one entry from a non-empty list (public-reply rotation). */
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+/**
+ * Case-insensitive whole-word match against a comma-separated trigger list.
+ * Trigger text is regex-escaped first so a keyword containing `.`/`(`/`$` etc.
+ * matches literally instead of altering the pattern.
+ */
 function keywordMatches(triggerValue: string, text: string): boolean {
   return triggerValue
     .split(",")
@@ -77,6 +85,11 @@ function keywordMatches(triggerValue: string, text: string): boolean {
 // Instagram's generic template requires more than just a title (Meta: "at least
 // one property must be set in addition to title"), so a bare-title card is sent
 // as plain text instead of being rejected outright.
+/**
+ * True when a card has at least one field besides its title, i.e. something the
+ * generic template can actually render (image, link, subtitle or a labelled
+ * button). A bare-title card is sent as plain text instead of a rejected template.
+ */
 function cardHasRichContent(card: any): boolean {
   if (!card) return false
   return Boolean(
@@ -143,6 +156,11 @@ async function sendCardResponse(
 // Unified response sender — handles text, card, media, quick
 // replies, typing indicators, and human-like delays.
 // ============================================================
+/**
+ * Single delivery path for every automation reply: media, card or text, plus
+ * optional quick replies, typing indicator and human-like delay. Order of
+ * preference matches what the rule stored (media > card > text).
+ */
 async function sendAutomationResponse(
   token: string,
   recipient: { id?: string; comment_id?: string },
@@ -258,6 +276,9 @@ async function verifyFollowStatus(
 
       // 401/403 is an auth/permission failure: fail CLOSED (unchanged behaviour).
       // Still not evidence about following — it is UNKNOWN, not DOES_NOT_FOLLOW.
+      const errorText = await response.text()
+      console.error(`[webhook] Follow status check failed: ${response.status} ${redactSecrets(errorText)}`)
+      // Distinguish auth failures (fail closed) from transient (fail open)
       if (response.status === 401 || response.status === 403) {
         console.warn(
           `[follow-gate] API result: UNKNOWN (userId=${igScopedId}) ` +
@@ -358,6 +379,10 @@ async function claimWebhookEvent(supabase: any, eventKey: string | null | undefi
 // Stores event kinds and IG IDs only. Never stores tokens, signatures,
 // headers, or message bodies.
 // ============================================================
+/**
+ * Classify a messaging event for the audit trail. Returns only a short kind
+ * string — never message text, sender ids or other PII.
+ */
 function describeMessagingEvent(event: any): string {
   if (event?.message?.is_echo) return "echo"
   if (event?.read) return "read"

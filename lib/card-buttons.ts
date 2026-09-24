@@ -1,4 +1,4 @@
-import { isHttpUrl } from "./instagram-api"
+import { isHttpUrl } from "./is-http-url"
 
 /**
  * The canonical Card/Link button contract.

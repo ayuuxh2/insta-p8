@@ -5,10 +5,16 @@
 // Executes the real route modules with stubbed Supabase / Graph API so the whole
 // DM path is covered: Meta verification -> delivery -> account lookup ->
 // automation match -> DM send -> persistence.
+//
+// Node version: this harness imports the real `.ts` modules directly, which needs
+// Node's native TypeScript type stripping. Supported configurations:
+//   * Node.js 22.18+   (type stripping on by default)
+//   * Node.js 23.6+    (type stripping on by default)
+//   * Node.js 22.6+    with `node --experimental-strip-types`
+// Older releases cannot load the route modules and will fail on import.
 import crypto from "node:crypto"
 import assert from "node:assert/strict"
 import { register } from "node:module"
-import { state } from "./stubs.mjs"
 
 process.env.INSTAGRAM_APP_ID = "1234567890"
 process.env.INSTAGRAM_APP_SECRET = "test-secret"
@@ -19,11 +25,17 @@ delete process.env.DISABLE_WEBHOOK_SIGNATURE_CHECK
 
 register("./loader.mjs", import.meta.url)
 
+// Imported after `register` so the stubs module (which re-exports lib modules)
+// is resolved through the loader hook rather than Node's default resolver.
+const { state } = await import("./stubs.mjs")
+
 const cb = await import(new URL("../../app/api/instagram/callback/route.ts", import.meta.url).href)
 const wh = await import(new URL("../../app/api/instagram/webhook/route.ts", import.meta.url).href)
 const autos = await import(new URL("../../app/api/automations/route.ts", import.meta.url).href)
 const session = await import(new URL("../../app/api/session/route.ts", import.meta.url).href)
 const media = await import(new URL("../../app/api/instagram/media/route.ts", import.meta.url).href)
+const testLogin = await import(new URL("../../app/api/instagram/test-login/route.ts", import.meta.url).href)
+const iceBreakers = await import(new URL("../../app/api/ice-breakers/route.ts", import.meta.url).href)
 // Real modules (no stubs involved) so these paths are genuinely exercised.
 const realIg = await import(new URL("../../lib/instagram-api.ts", import.meta.url).href)
 const auth = await import(new URL("../../lib/api-auth.ts", import.meta.url).href)
@@ -207,10 +219,11 @@ const check = (name, fn) => {
     assert.equal(state.upserts[0].business_account_id, IG_ID)
     assert.equal(state.upserts[0].page_id, IG_ID)
   })
-  check("F2 login issues an httpOnly session cookie", () => {
+  check("F2 login issues an httpOnly session cookie for the signed session lifetime", () => {
     assert.equal(res._cookie?.name, "insta_session")
     assert.ok(res._cookie?.value, "cookie value must be set")
     assert.equal(res._cookie?.options?.httpOnly, true)
+    assert.equal(res._cookie?.options?.maxAge, auth.SESSION_TTL_SECONDS)
   })
 }
 
@@ -225,6 +238,7 @@ const check = (name, fn) => {
   state.automations = [
     {
       id: "card1",
+      user_id: "256123",
       name: "Guide card",
       trigger_source: "dm",
       trigger_type: "keyword",
@@ -325,6 +339,78 @@ const check = (name, fn) => {
     assert.equal(page.valid, false)
     assert.equal(img.valid, true)
     assert.equal(unknown.valid, true)
+  })
+}
+
+// K2. SSRF: the image probe must not connect to private/internal destinations,
+// and must not trust URL syntax alone (a metadata IP is a valid-looking URL).
+{
+  const prevFetch = global.fetch
+  const requested = []
+  global.fetch = async (url) => {
+    requested.push(String(url))
+    return { ok: true, headers: new Headers({ "content-type": "image/png" }) }
+  }
+  const loopback = await realIg.validateImageUrl("http://127.0.0.1/secret.png")
+  const namedLocalhost = await realIg.validateImageUrl("http://localhost/secret.png")
+  const internal = await realIg.validateImageUrl("http://internal.example/secret.png")
+  const metadata = await realIg.validateImageUrl("http://169.254.169.254/latest/meta-data/")
+  const privateName = await realIg.validateImageUrl("https://private.example/cover.png")
+  const unresolvable = await realIg.validateImageUrl("https://unresolvable.example/cover.png")
+  const publicOk = await realIg.validateImageUrl("https://example.com/cover.png")
+  global.fetch = prevFetch
+  check("K2 private, loopback and metadata destinations are rejected without a request", () => {
+    for (const result of [loopback, namedLocalhost, internal, metadata, privateName, unresolvable]) {
+      assert.equal(result.valid, false, "unverified destination must be rejected")
+    }
+    assert.equal(publicOk.valid, true)
+    assert.deepEqual(requested, ["https://example.com/cover.png"], "only public destinations may be fetched")
+  })
+}
+
+// K3. Redirects are re-validated at every hop, so a public URL cannot bounce the
+// server into the internal network.
+{
+  const prevFetch = global.fetch
+  const redirecting = (location) => async (url) =>
+    String(url).endsWith("/public.png")
+      ? { ok: false, status: 302, headers: new Headers({ location }) }
+      : { ok: true, headers: new Headers({ "content-type": "image/png" }) }
+
+  global.fetch = redirecting("http://127.0.0.1/secret.png")
+  const bounced = await realIg.validateImageUrl("https://example.com/public.png")
+  global.fetch = redirecting("https://cdn.example.com/final.png")
+  const publicRedirect = await realIg.validateImageUrl("https://example.com/public.png")
+  global.fetch = prevFetch
+
+  check("K3 a redirect into a private address is rejected; a public redirect validates", () => {
+    assert.equal(bounced.valid, false)
+    assert.equal(publicRedirect.valid, true)
+  })
+}
+
+// K4. isHttpUrl parses the URL instead of prefix-matching it.
+{
+  const syntacticallyValid = ["https://example.com/x", "http://example.com", "  https://example.com/x  "]
+  const syntacticallyInvalid = [
+    "",
+    "http://",
+    "https://",
+    "http:",
+    "https:",
+    "javascript:alert(1)",
+    "data:text/html,x",
+    "file:///etc/passwd",
+    "not a url",
+  ]
+  check("K4 isHttpUrl accepts real http(s) URLs and rejects malformed/non-http schemes", () => {
+    for (const url of syntacticallyValid) assert.equal(realIg.isHttpUrl(url), true, `expected valid: ${JSON.stringify(url)}`)
+    for (const url of syntacticallyInvalid)
+      assert.equal(realIg.isHttpUrl(url), false, `expected invalid: ${JSON.stringify(url)}`)
+    // Host-local names stay syntactically valid — the SSRF guard is what rejects
+    // them, which is why the two checks are separate.
+    assert.equal(realIg.isHttpUrl("http://localhost"), true)
+    assert.equal(realIg.isHttpUrl("http://127.0.0.1"), true)
   })
 }
 
@@ -534,6 +620,46 @@ const check = (name, fn) => {
     Buffer.from(JSON.stringify({ userId: "999999", username: "creator" })).toString("base64url") + "." + signature
   const parsed = auth.readSession(fakeRequest({ url: "https://x/api/session", session: tampered }))
   check("S2 a tampered signed cookie is rejected", () => assert.equal(parsed, null))
+}
+
+// S3. Server-enforced expiry: exp is part of the signed payload and the server
+// rejects expired/malformed sessions even while the browser cookie is present.
+{
+  const now = Math.floor(Date.now() / 1000)
+  const sessionKey = "test-session-secret"
+  const signed = (body) => `${body}.${crypto.createHmac("sha256", sessionKey).update(body).digest("base64url")}`
+  const bodyOf = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url")
+  const read = (value) => auth.readSession(fakeRequest({ url: "https://x/api/session", session: value }))
+
+  const live = auth.serializeSession({ userId: "256123", username: "creator" })
+  const decoded = JSON.parse(Buffer.from(live.split(".")[0], "base64url").toString("utf8"))
+  const loginRes = await testLogin.POST(fakeRequest({ url: "https://x/api/instagram/test-login" }))
+
+  check("S3 a fresh session carries a numeric iat/exp spanning SESSION_TTL_SECONDS", () => {
+    assert.equal(decoded.userId, "256123")
+    assert.equal(typeof decoded.iat, "number")
+    assert.equal(typeof decoded.exp, "number")
+    assert.equal(decoded.exp - decoded.iat, auth.SESSION_TTL_SECONDS)
+    assert.equal(read(live)?.exp, decoded.exp)
+  })
+  check("S3b a future exp is accepted and an expired session is rejected", () => {
+    assert.ok(read(signed(bodyOf({ userId: "256123", iat: now, exp: now + 3600 }))))
+    assert.equal(read(signed(bodyOf({ userId: "256123", iat: now - 7200, exp: now - 60 }))), null)
+  })
+  check("S3c missing/non-numeric exp and malformed payloads are rejected", () => {
+    assert.equal(read(signed(bodyOf({ userId: "256123" }))), null)
+    assert.equal(read(signed(bodyOf({ userId: "256123", exp: "soon" }))), null)
+    assert.equal(read(signed(Buffer.from("{not json").toString("base64url"))), null)
+  })
+  check("S3d a well-formed payload with a bad signature is rejected", () => {
+    const body = bodyOf({ userId: "256123", exp: now + 3600 })
+    assert.equal(read(`${body}.deadbeef`), null)
+  })
+  check("S3e test-login issues a session with the same lifetime", () => {
+    assert.equal(loginRes.status, 200)
+    assert.equal(loginRes._cookie?.options?.maxAge, auth.SESSION_TTL_SECONDS)
+    assert.equal(read(loginRes._cookie?.value)?.userId, "9999999999")
+  })
 }
 
 // T. Signature-bypass flag is impossible to arm in production
@@ -849,6 +975,7 @@ const postRule = (body) =>
   })
 }
 
+
 // ============================================================
 // FOLLOW GATE — three-state result: FOLLOWS / DOES_NOT_FOLLOW / UNKNOWN
 // A commenter with no messaging consent gets Meta code 230; that must map to
@@ -1136,6 +1263,138 @@ function stubMediaFetch(response) {
   check("M5 media logs never contain the access token", () => {
     assert.ok(logs.length > 0, "the route must log diagnostics")
     assert.ok(!logs.some((l) => l.includes("SECRET_TOKEN_XYZ")), "token must never be logged")
+  })
+}
+// X. Ice breakers: correct Meta payload shape, DELETE on empty, and honest
+// reporting when Meta rejects the sync.
+{
+  const prevFetch = global.fetch
+  const requests = []
+  let reply = { ok: true, status: 200, json: async () => ({ success: true }) }
+  global.fetch = async (url, init = {}) => {
+    requests.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(init.body) : null })
+    return reply
+  }
+
+  const ibPost = (body) =>
+    iceBreakers.POST(fakeRequest({ url: "https://x/api/ice-breakers", body: JSON.stringify(body), session: SESSION }))
+
+  state.iceBreakers = []
+  const saved = await ibPost({
+    userId: "256123",
+    iceBreakers: [
+      { question: "What are your prices?", response: "Starts at $10" },
+      { question: "What are your hours?", response: "9am-5pm" },
+    ],
+  })
+  const createRequest = requests[0]
+
+  const tooMany = await ibPost({
+    userId: "256123",
+    iceBreakers: Array.from({ length: 5 }, (_, i) => ({ question: `q${i}`, response: "r" })),
+  })
+  const blank = await ibPost({ userId: "256123", iceBreakers: [{ question: "   ", response: "r" }] })
+  const tooLong = await ibPost({ userId: "256123", iceBreakers: [{ question: "x".repeat(81), response: "r" }] })
+
+  state.iceBreakers = [{ id: "ib_old", user_id: "256123", question: "old", response: "old" }]
+  requests.length = 0
+  const cleared = await ibPost({ userId: "256123", iceBreakers: [] })
+  const clearRequest = requests[0]
+
+  reply = { ok: false, status: 400, json: async () => ({ error: { type: "OAuthException", code: 190, message: "bad token" } }) }
+  const rejected = await ibPost({ userId: "256123", iceBreakers: [{ question: "Hi", response: "Hello" }] })
+
+  global.fetch = prevFetch
+  state.iceBreakers = []
+
+  check("X ice breakers are POSTed as ice_breakers[0].call_to_actions", () => {
+    assert.equal(saved.status, 200)
+    assert.equal(createRequest.method, "POST")
+    assert.match(createRequest.url, /\/me\/messenger_profile\?access_token=/)
+    assert.equal(createRequest.body.platform, "instagram")
+    assert.equal(createRequest.body.ice_breakers.length, 1)
+    assert.equal(createRequest.body.ice_breakers[0].call_to_actions.length, 2)
+    assert.equal(createRequest.body.ice_breakers[0].call_to_actions[0].question, "What are your prices?")
+    assert.ok(createRequest.body.ice_breakers[0].call_to_actions[0].payload.startsWith("ICE_BREAKER_"))
+  })
+  check("X2 removing every ice breaker DELETEs the ice_breakers field", () => {
+    assert.equal(cleared.status, 200)
+    assert.equal(clearRequest.method, "DELETE")
+    assert.deepEqual(clearRequest.body, { fields: ["ice_breakers"] })
+    assert.equal(state.iceBreakers.filter((row) => row.user_id === "256123").length, 0)
+  })
+  check("X3 invalid entries are rejected before any Meta call", () => {
+    assert.equal(tooMany.status, 400)
+    assert.equal(blank.status, 400)
+    assert.equal(tooLong.status, 400)
+  })
+  check("X4 a Meta rejection is reported as a sync failure, never a fake success", () => {
+    assert.equal(rejected.status, 502)
+    assert.equal(rejected._json.savedLocally, true)
+  })
+}
+
+// M5. The access token must never reach any console channel, even when a network
+// error embeds the full token-bearing URL in its message.
+{
+  const channels = ["log", "error", "warn", "info"]
+  const originals = {}
+  const captured = []
+  const prevFetch = global.fetch
+  const prevToken = state.user.access_token
+  const prevAutomations = state.automations
+  const secret = "IGsecretToken_abcdef1234567890"
+
+  state.user.access_token = secret
+  state.automations = [
+    {
+      id: "gate1",
+      user_id: "256123",
+      name: "Gate rule",
+      trigger_source: "dm",
+      trigger_type: "keyword",
+      trigger_value: "secret",
+      response_content: { check_follow: true, message: "hi" },
+      is_active: true,
+    },
+  ]
+
+  try {
+    for (const channel of channels) {
+      originals[channel] = console[channel]
+      console[channel] = (...args) => {
+        captured.push(
+          args
+            .map((arg) =>
+              typeof arg === "string"
+                ? arg
+                : arg instanceof Error
+                  ? `${arg.name}: ${arg.message} ${arg.cause ?? ""}`
+                  : JSON.stringify(arg),
+            )
+            .join(" "),
+        )
+      }
+    }
+    // Worst case: the transport fails with an error whose message is the URL.
+    global.fetch = async (url) => {
+      throw new Error(`network failure for ${url}`)
+    }
+    const raw = delivery("secret", "leak-mid-1")
+    await cb.POST(fakeRequest({ url: "https://x/api/instagram/callback", body: raw, headers: { "x-hub-signature-256": sign(raw) } }))
+  } finally {
+    for (const channel of channels) console[channel] = originals[channel]
+    global.fetch = prevFetch
+    state.user.access_token = prevToken
+    state.automations = prevAutomations
+    state.sent = 0
+  }
+
+  check("M5 the access token is never logged through log/error/warn/info", () => {
+    const output = captured.join("\n")
+    assert.ok(captured.length > 0, "expected console output to scan")
+    assert.equal(output.includes(secret), false, "access token must never be logged")
+
   })
 }
 

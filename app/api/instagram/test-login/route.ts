@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
       username: TEST_USERNAME,
       userId: TEST_USER_ID,
     })
-    const { name, ...cookieOptions } = sessionCookieOptions(60 * 24 * 60 * 60)
+    // Same signed-session lifetime as the real login path (default = SESSION_TTL_SECONDS).
+    const { name, ...cookieOptions } = sessionCookieOptions()
     response.cookies.set(name, serializeSession({ username: TEST_USERNAME, userId: TEST_USER_ID }), {
       ...cookieOptions,
       secure: false,

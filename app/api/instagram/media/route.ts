@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/api-auth"
+import { redactSecrets } from "@/lib/redact"
 
 // ============================================================
 // Instagram media fetch (/me/media)
@@ -199,6 +200,12 @@ export async function GET(request: NextRequest) {
         },
         { status: statusForMediaError(normalized) },
       )
+      // A non-2xx response does not guarantee an `error` object, so guard it
+      // rather than throwing a TypeError that masks the real failure.
+      if (data?.error?.code === 190) {
+         return NextResponse.json({ error: "Session Expired. Please Logout & Login." }, { status: 401 })
+      }
+      return NextResponse.json({ error: data?.error?.message || "Failed to fetch media" }, { status: 500 })
     }
 
     // Normalize: pick thumbnail_url for videos, media_url for images.
@@ -213,6 +220,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: normalized })
   } catch (error) {
     console.error("[instagram/media] Server Error:", error instanceof Error ? error.message : error)
+    // The failed request URL carries the access token; redact before logging.
+    console.error("[v0] Server Error:", redactSecrets(error))
     return NextResponse.json({ error: "Server Error" }, { status: 500 })
   }
 }

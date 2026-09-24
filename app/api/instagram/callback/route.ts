@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { serializeSession, sessionCookieOptions, sessionSecretProblem } from "@/lib/api-auth"
+import { redactSecrets } from "@/lib/redact"
 import { handleWebhookVerification, isMetaWebhookDelivery } from "@/lib/webhook-verify"
 // Reuse the real Instagram webhook processor. Importing the route module keeps a
 // single source of truth for event handling instead of duplicating it here.
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
         // Harmless double-fire from React StrictMode or double clicks
         return NextResponse.json({ error: "Code already used" }, { status: 400 })
       }
-      console.error("[v0] 🔴 Token Error:", JSON.stringify(tokenData, null, 2))
+      console.error("[v0] 🔴 Token Error:", redactSecrets(tokenData))
       return NextResponse.json({ error: tokenData.error_description || "Token failed" }, { status: 400 })
     }
 
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
         `https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`
       )
       const meData = await meRes.json()
-      console.log("[v0] 📋 /me response:", JSON.stringify(meData))
+      console.log("[v0] 📋 /me response:", redactSecrets(meData))
 
       if (meData.username) username = meData.username
       if (meData.profile_picture_url) profilePic = meData.profile_picture_url
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
         console.warn(`[v0] ⚠️ /me did not return user_id, using loginUserId: ${loginUserId}`)
       }
     } catch (e) {
-      console.error("[v0] /me request failed:", e)
+      console.error("[v0] /me request failed:", redactSecrets(e))
     }
 
     // 6. Save/Update User
@@ -173,11 +174,16 @@ export async function POST(request: NextRequest) {
     if (upsertError) throw upsertError
 
     const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
-    const { name, ...cookieOptions } = sessionCookieOptions(expiresIn)
+    // The cookie lifetime is the signed session lifetime, not the access-token
+    // lifetime: the server enforces the same deadline inside the token.
+    const { name, ...cookieOptions } = sessionCookieOptions()
     response.cookies.set(name, serializeSession({ username, userId: loginUserId }), cookieOptions)
     return response
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    // Never echo a raw error to the client: a failed fetch can embed the token
+    // or client secret in its message.
+    console.error("[callback] login failed:", redactSecrets(error))
+    return NextResponse.json({ error: "Login failed" }, { status: 500 })
   }
 }

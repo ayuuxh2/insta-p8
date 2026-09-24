@@ -98,6 +98,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_events_event_key
 
 -- Direct account resolution for incoming webhooks: users lookup by the Instagram
 -- professional account id (webhook entry.id) without scanning every account.
+-- Add the columns first: an install created by the legacy
+-- scripts/01-create-tables.sql predates them, so CREATE TABLE IF NOT EXISTS above
+-- is a no-op there and the indexes below would fail on a missing column (which
+-- aborts the rest of the migration).
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS business_account_id BIGINT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS page_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_users_business_account_id ON public.users(business_account_id);
 CREATE INDEX IF NOT EXISTS idx_users_page_id ON public.users(page_id);
 
@@ -234,6 +240,9 @@ CREATE TABLE IF NOT EXISTS public.unlock_attempts (
 -- ==========================================
 -- Indexes for performance
 -- ==========================================
+-- Same ordering guarantee as the users indexes: legacy installs may predate the
+-- column, so add it before indexing it.
+ALTER TABLE public.automations ADD COLUMN IF NOT EXISTS trigger_source TEXT NOT NULL DEFAULT 'comment';
 CREATE INDEX IF NOT EXISTS idx_automations_trigger_source ON public.automations(trigger_source);
 CREATE INDEX IF NOT EXISTS idx_automations_user_source ON public.automations(user_id, trigger_source);
 CREATE INDEX IF NOT EXISTS idx_content_pool_user_sequence ON public.content_pool(user_id, sequence_index);

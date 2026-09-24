@@ -24,6 +24,7 @@ export const state = {
       is_active: true,
     },
   ],
+  iceBreakers: [],
   sent: 0,
   lastSend: null,
   cardSent: 0,
@@ -116,7 +117,23 @@ function makeDb() {
         pending = { data: null, error: null }
         return q
       },
+      delete() {
+        if (table === "ice_breakers") {
+          state.iceBreakers = state.iceBreakers.filter((row) => !match(row))
+        }
+        pending = { data: null, error: null }
+        return q
+      },
       insert(row) {
+        if (table === "ice_breakers") {
+          const rows = (Array.isArray(row) ? row : [row]).map((entry, index) => ({
+            id: entry.id || `ib_${state.iceBreakers.length + index + 1}`,
+            ...entry,
+          }))
+          state.iceBreakers.push(...rows)
+          pending = { data: rows, error: null }
+          return q
+        }
         if (table === "automations") {
           const saved = { id: row.id || `auto_${state.automations.length + 1}`, is_active: true, ...row }
           state.automations.push(saved)
@@ -179,8 +196,12 @@ function makeDb() {
           pending = null
           return Promise.resolve(p).then(resolve, reject)
         }
+        // Apply the recorded .eq() filters. Returning every automation here would
+        // let the authorization/scoping tests pass even if production stopped
+        // filtering by user_id / is_active.
         let data = null
-        if (table === "automations") data = state.automations
+        if (table === "automations") data = state.automations.filter(match)
+        if (table === "ice_breakers") data = state.iceBreakers.filter(match)
         if (table === "messages") data = state.saved.filter(match)
         if (table === "webhook_events") data = state.audit.filter((row) => match(row) && containsMatch(row))
         return Promise.resolve({ data, error: null }).then(resolve, reject)

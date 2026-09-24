@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/api-auth"
+import { redactSecrets } from "@/lib/redact"
 
 /**
  * POST /api/instagram/send-message
@@ -92,7 +93,8 @@ export async function POST(request: NextRequest) {
       message_id: data.message_id,
     })
   } catch (error) {
-    console.error("[v0] Send message error:", error)
+    // The failed request URL carries the access token; redact before logging.
+    console.error("[v0] Send message error:", redactSecrets(error))
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

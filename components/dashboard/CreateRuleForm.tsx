@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react"
 import {
-  Plus, Trash2, Film, Check, MessageCircle, Send, AtSign, Heart,
-  MessageSquare, Image as ImageIcon, Timer, Eye, Megaphone, Lock,
-  Link2, Zap, ChevronDown, ChevronRight, ChevronLeft, X, Loader2,
+  Plus, Trash2, Film, Check, MessageCircle, AtSign, Heart,
+  MessageSquare, Image as ImageIcon, Timer, Eye, Lock,
+  Link2, Zap, ChevronRight, ChevronLeft, Loader2,
   ArrowLeft, Phone, Video, Info, Sparkles, Smile, Camera, Mic, Image as PicIcon,
   Globe
 } from "lucide-react"
@@ -181,17 +181,29 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   const thenValid =
     replyMode === "public_only" ||
     (type === "text" ? messageText.trim().length > 0 : type === "card" ? cardTitle.trim().length > 0 : mediaUrl.trim().length > 0)
-  const canSave = whenValid && thenValid && name.trim().length > 0 && !buttonError
 
+  // The Response step must agree with Publish. An invalid card button blocks
+  // *advancing to Review*, not just the final save — otherwise the Review step
+  // looked complete while Publish stayed disabled with no visible reason.
   const stepValid = [
-    whenValid,  // step 0
-    thenValid,  // step 1
+    whenValid, // step 0
+    thenValid && !buttonError, // step 1
     name.trim().length > 0, // step 2
   ]
+  const canSave = stepValid.every(Boolean)
   const sourceLabel = triggerSource === "comment" ? "comment" : triggerSource === "dm" ? "direct message" : "story"
-  const validationHint = step === 0
-    ? triggerSource === "comment" && !hasSelectedReelOption ? "Choose a post, reel, or All posts to continue." : needsKeywords && triggers.length === 0 ? "Add at least one keyword to continue." : ""
-    : step === 1 && !thenValid ? "Add the reply people should receive." : step === 2 && !name.trim() ? "Give this workflow a name before publishing." : ""
+  const validationHint =
+    step === 0
+      ? triggerSource === "comment" && !hasSelectedReelOption
+        ? "Choose a post, reel, or All posts to continue."
+        : needsKeywords && triggers.length === 0
+          ? "Add at least one keyword to continue."
+          : ""
+      : step === 1
+        ? buttonError || (!thenValid ? "Add the reply people should receive." : "")
+        : step === 2 && !name.trim()
+          ? "Give this workflow a name before publishing."
+          : ""
 
   /* Plain-language summary sentence */
   const summary = useMemo(() => {
@@ -216,7 +228,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   const handleSubmit = async () => {
     if (saving) return
     // Guard even when the button is disabled, so the reason is always surfaced.
-    if (type === "card" && replyMode !== "public_only") {
+    if (usesCard) {
       const err = validateCardButtons(buttons)
       if (err) { toast.error(err); return }
     }
@@ -242,9 +254,10 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     } else if (type === "media") {
       content.media = { type: mediaType, url: mediaUrl.trim() }
       if (messageText.trim()) content.message = messageText
-    } else {
-      // Validated above. Serialize to the canonical stored shape; nothing is
-      // filtered out here, so every configured button reaches the DB and sender.
+    } else if (usesCard) {
+      // Validated above. A "public_only" reply never sends the card, so it must
+      // not be serialized either — otherwise a stale/incomplete card would be
+      // persisted and later rejected by the API for a rule that never uses it.
       content.card = {
         title: cardTitle,
         subtitle: cardSubtitle || undefined,

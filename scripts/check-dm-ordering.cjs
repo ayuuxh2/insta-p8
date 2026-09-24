@@ -38,6 +38,7 @@ async function test(matched, profileFails = false) {
       isHttpUrl: v => typeof v === 'string' && /^https?:\/\//i.test(v),
     },
     '@/lib/ai-reply': {}, '@/lib/unlock-tracking': { unlockKey: () => 'key' },
+    '@/lib/redact': { redactSecrets: value => (typeof value === 'string' ? value : String(value?.message ?? value)) },
     '@/lib/webhook-verify': {
       handleWebhookVerification: () => ({}),
       isMetaWebhookDelivery: () => false,

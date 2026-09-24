@@ -24,7 +24,24 @@ import { type NextRequest, NextResponse } from "next/server"
  *     `next dev` works without extra setup; tests set SESSION_SECRET directly.
  */
 
+/**
+ * Lifetime of a signed session, in seconds. The cookie `maxAge` and the signed
+ * `exp` claim both derive from this one value, so the browser dropping the
+ * cookie and the server rejecting the session always coincide.
+ */
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 60
+
 export interface SessionPayload {
+  userId: string
+  username?: string
+  /** Issued-at, Unix seconds. */
+  iat: number
+  /** Expiry, Unix seconds. Enforced by the server, never by the browser alone. */
+  exp: number
+}
+
+/** Fields a caller supplies when minting a session; `iat`/`exp` are derived. */
+export interface SessionInput {
   userId: string
   username?: string
 }
@@ -90,10 +107,20 @@ function safeEqual(a: string, b: string): boolean {
 /**
  * Serialize a dashboard session for the `insta_session` cookie.
  *
- * Throws when no signing key is available: an unsigned cookie would be a
- * forgeable bearer token, so we fail closed rather than mint one.
+ * The signed payload includes `iat`/`exp` so expiry is part of the authenticated
+ * data — a stolen cookie dies on its own instead of staying valid until the
+ * signing key rotates. Throws when no signing key is available: an unsigned
+ * cookie would be a forgeable bearer token, so we fail closed rather than mint
+ * one.
  */
-export function serializeSession(payload: SessionPayload): string {
+export function serializeSession(input: SessionInput): string {
+  const issuedAt = Math.floor(Date.now() / 1000)
+  const payload: SessionPayload = {
+    userId: String(input.userId),
+    ...(input.username ? { username: input.username } : {}),
+    iat: issuedAt,
+    exp: issuedAt + SESSION_TTL_SECONDS,
+  }
   const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url")
   const key = sessionSecret()
   if (!key) {
@@ -107,8 +134,11 @@ export function serializeSession(payload: SessionPayload): string {
  * httpOnly: the cookie is the API's authorization token, so JavaScript (and any
  * injected script) must not be able to read it. The client learns its identity
  * from /api/session instead.
+ *
+ * `maxAgeSeconds` defaults to the signed session lifetime so the cookie and the
+ * server-enforced `exp` cannot drift apart.
  */
-export function sessionCookieOptions(maxAgeSeconds: number) {
+export function sessionCookieOptions(maxAgeSeconds: number = SESSION_TTL_SECONDS) {
   return {
     name: COOKIE_NAME,
     path: "/",
@@ -130,7 +160,15 @@ export function clearSessionCookie(response: { cookies: { set: (...args: any[]) 
   })
 }
 
-/** Parse and verify the `insta_session` cookie. Returns null when absent or invalid. */
+/**
+ * Parse and verify the `insta_session` cookie. Returns null when the cookie is
+ * absent, has an invalid signature, is malformed, or has expired.
+ *
+ * Order matters: the signature is verified over the raw body *before* the
+ * payload is parsed, so unauthenticated JSON is never interpreted. Expiry is
+ * then enforced from the signed `exp` claim — the browser cookie lifetime is
+ * advisory only and must never be the server's reason to trust a session.
+ */
 export function readSession(request: NextRequest): SessionPayload | null {
   try {
     const raw = request.cookies?.get(COOKIE_NAME)?.value
@@ -147,14 +185,33 @@ export function readSession(request: NextRequest): SessionPayload | null {
     const signature = raw.slice(dot + 1)
     if (!safeEqual(signature, sign(body, key))) return null
 
-    const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as SessionPayload
+    const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Partial<SessionPayload>
     if (!parsed || typeof parsed !== "object" || !parsed.userId) return null
-    return { userId: String(parsed.userId), username: parsed.username }
+
+    // A signed session must carry a numeric expiry; anything else is malformed
+    // (e.g. a cookie minted before expiry existed) and must not be honoured.
+    const { exp, iat } = parsed
+    if (typeof exp !== "number" || !Number.isFinite(exp)) return null
+    const now = Math.floor(Date.now() / 1000)
+    if (exp <= now) return null
+
+    return {
+      userId: String(parsed.userId),
+      ...(parsed.username ? { username: parsed.username } : {}),
+      iat: typeof iat === "number" && Number.isFinite(iat) ? iat : exp - SESSION_TTL_SECONDS,
+      exp,
+    }
   } catch {
     return null
   }
 }
 
+/**
+ * Convenience for routes that only need the caller's id rather than the full
+ * payload. Returns null when the request is unauthenticated or the session is
+ * invalid/expired — callers must treat null as "not signed in", never as a
+ * default user.
+ */
 export function getSessionUserId(request: NextRequest): string | null {
   return readSession(request)?.userId ?? null
 }
