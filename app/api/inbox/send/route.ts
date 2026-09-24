@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireUser } from "@/lib/api-auth"
+import { redactSecrets } from "@/lib/redact"
 
 export async function POST(request: NextRequest) {
     try {
@@ -9,6 +11,9 @@ export async function POST(request: NextRequest) {
         if (!userId || !recipientId || (!message && !attachment)) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
         }
+
+        const denied = requireUser(request, userId)
+        if (denied) return denied
 
         const supabase = await getSupabaseServerClient()
 
@@ -34,7 +39,7 @@ export async function POST(request: NextRequest) {
 
         // 3. Send to Instagram
         const res = await fetch(
-            `https://graph.instagram.com/v24.0/me/messages?access_token=${user.access_token}`,
+            `https://graph.instagram.com/v24.0/me/messages?access_token=${encodeURIComponent(user.access_token)}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -44,9 +49,15 @@ export async function POST(request: NextRequest) {
 
         const data = await res.json()
 
-        if (data.error) {
-            console.error("[Inbox Send] Instagram API Error:", data.error)
-            return NextResponse.json({ error: data.error.message }, { status: 500 })
+        // A completed fetch() is not a delivered message: Meta signals failure with a
+        // non-2xx status and/or an `error` object in the body.
+        if (!res.ok || data?.error) {
+            const meta = data?.error
+            console.error(
+                `[Inbox Send] Instagram rejected the message: HTTP ${res.status}` +
+                    (meta ? ` type=${meta.type ?? "-"} code=${meta.code ?? "-"} message=${meta.message ?? "-"}` : ""),
+            )
+            return NextResponse.json({ error: meta?.message || "Failed to send message" }, { status: 502 })
         }
 
         // 4. Log to Database (Outbound Message)
@@ -82,7 +93,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, data })
 
     } catch (error) {
-        console.error("[Inbox Send] Internal Error:", error)
+        // The failed request URL carries the access token; redact before logging.
+        console.error("[Inbox Send] Internal Error:", redactSecrets(error))
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
     }
 }

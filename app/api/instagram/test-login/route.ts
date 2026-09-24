@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { serializeSession, sessionCookieOptions } from "@/lib/api-auth"
 
 /**
  * POST /api/instagram/test-login
@@ -42,17 +43,12 @@ export async function POST(request: NextRequest) {
       username: TEST_USERNAME,
       userId: TEST_USER_ID,
     })
-
-    response.cookies.set(
-      "insta_session",
-      JSON.stringify({ username: TEST_USERNAME, userId: TEST_USER_ID }),
-      {
-        path: "/",
-        maxAge: 60 * 24 * 60 * 60,
-        sameSite: "lax",
-        secure: false,
-      }
-    )
+    // Same signed-session lifetime as the real login path (default = SESSION_TTL_SECONDS).
+    const { name, ...cookieOptions } = sessionCookieOptions()
+    response.cookies.set(name, serializeSession({ username: TEST_USERNAME, userId: TEST_USER_ID }), {
+      ...cookieOptions,
+      secure: false,
+    })
 
     return response
   } catch (error: any) {

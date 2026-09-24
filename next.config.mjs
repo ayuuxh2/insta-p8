@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Type errors previously shipped to production because this was `true`. The
+  // codebase now typechecks clean (npx tsc --noEmit), so builds fail loudly on a
+  // real type error instead of silently deploying it.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,
