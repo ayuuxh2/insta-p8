@@ -1,0 +1,7 @@
+{
+  "name": "InstaAuto",
+  "description": "Instagram Automation — Auto-reply to comments, DMs, and stories with keyword triggers.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

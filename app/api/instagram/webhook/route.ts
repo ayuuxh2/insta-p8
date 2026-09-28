@@ -48,11 +48,15 @@ export async function GET(request: NextRequest) {
   const mode = searchParams.get("hub.mode")
   const token = searchParams.get("hub.verify_token")
   const challenge = searchParams.get("hub.challenge")
+  const configuredToken = (process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || "").trim()
 
-  if (mode === "subscribe" && WEBHOOK_VERIFY_TOKEN && token === WEBHOOK_VERIFY_TOKEN && challenge) {
-    return new NextResponse(challenge, { status: 200 })
+  if (mode === "subscribe" && configuredToken && token === configuredToken && challenge) {
+    return new NextResponse(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    })
   }
-  return NextResponse.json({ error: "Invalid token" }, { status: 403 })
+  return NextResponse.json({ error: "Invalid token or mode" }, { status: 403 })
 }
 
 // ============================================================
