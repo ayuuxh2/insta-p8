@@ -65,6 +65,54 @@ export function buildCardAttachment(card: IGCard) {
   }
 }
 
+// Postback payload prefixes for the follow-gate flow. The rule id follows the prefix.
+export const OPTIN_PAYLOAD_PREFIX = "WANT_"
+export const UNLOCK_PAYLOAD_PREFIX = "UNLOCK_CONTENT_"
+
+/**
+ * First message of a follow-gated comment rule, sent as a private reply.
+ * Instagram only lets us check `is_user_follow_business` after the person
+ * interacts in the DM, so we ask them to tap a button before checking.
+ */
+export function buildOptInCard(params: {
+  ruleId: string
+  title?: string
+  subtitle?: string
+  buttonTitle?: string
+}): IGCard {
+  return {
+    title: params.title?.trim() || "Quer receber? 🎁",
+    subtitle: params.subtitle?.trim() || "Toque no botão abaixo que eu te envio aqui no direct.",
+    buttons: [
+      { type: "postback", title: (params.buttonTitle?.trim() || "Quero receber").slice(0, 20), payload: `${OPTIN_PAYLOAD_PREFIX}${params.ruleId}` },
+    ],
+  }
+}
+
+/**
+ * Whether the person follows the business account. Only valid after they interacted
+ * in the DM (message, button tap, story reply). Returns null when Instagram could not
+ * answer; callers must treat null as "not confirmed" and never deliver gated content.
+ */
+export async function checkFollowsBusiness(token: string, igScopedId: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${GRAPH}/${igScopedId}?fields=is_user_follow_business`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    })
+    const json = await res.json()
+    if (!res.ok || json.error) {
+      console.error(`[ig-api] follow check failed (${res.status}):`, json.error?.code, json.error?.message)
+      return null
+    }
+    if (typeof json.is_user_follow_business !== "boolean") return null
+    return json.is_user_follow_business
+  } catch (e: any) {
+    console.error("[ig-api] follow check network error:", e?.name || e)
+    return null
+  }
+}
+
 /**
  * Build the follower-gate card shown to non-followers. Centralized so the
  * comment, story, and DM branches all share the same copy and the same
@@ -82,7 +130,7 @@ export function buildFollowGateCard(params: {
     subtitle: params.subtitle ?? `Siga a @${params.username} e toque em "Já segui" para receber.`,
     buttons: [
       { type: "web_url", url: `https://instagram.com/${params.username}`, title: "Seguir" },
-      { type: "postback", title: "Já segui ✅", payload: `UNLOCK_CONTENT_${params.ruleId}` },
+      { type: "postback", title: "Já segui ✅", payload: `${UNLOCK_PAYLOAD_PREFIX}${params.ruleId}` },
     ],
   }
 }

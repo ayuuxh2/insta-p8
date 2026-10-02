@@ -61,6 +61,10 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   /* ---------- EXTRAS ---------- */
   const [name, setName] = useState("")
   const [checkFollow, setCheckFollow] = useState(false)
+  // Texts of the "Quero receber" card sent as a private reply on follow-gated comment rules.
+  const [optinTitle, setOptinTitle] = useState("")
+  const [optinSubtitle, setOptinSubtitle] = useState("")
+  const [optinButton, setOptinButton] = useState("")
   const [delaySeconds, setDelaySeconds] = useState(0)
   const [typingIndicator, setTypingIndicator] = useState(false)
 
@@ -114,6 +118,9 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     setPublicReplies(content.public_replies || [])
     setIncludeReplies(content.include_replies === true)
     setCheckFollow(content.check_follow === true)
+    setOptinTitle(content.optin_title || "")
+    setOptinSubtitle(content.optin_subtitle || "")
+    setOptinButton(content.optin_button || "")
     setDelaySeconds(Number(content.delay_seconds) || 0)
     setTypingIndicator(content.typing_indicator === true)
     
@@ -204,6 +211,11 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
       content.reply_mode = replyMode
       if (publicReplies.length > 0) content.public_replies = publicReplies
       if (includeReplies) content.include_replies = true
+      if (checkFollow) {
+        if (optinTitle.trim()) content.optin_title = optinTitle.trim()
+        if (optinSubtitle.trim()) content.optin_subtitle = optinSubtitle.trim()
+        if (optinButton.trim()) content.optin_button = optinButton.trim()
+      }
     }
     if (quickReplies.filter((q) => q.title.trim()).length > 0) {
       content.quick_replies = quickReplies.filter((q) => q.title.trim()).map((q) => ({ title: q.title.trim(), payload: q.payload }))
@@ -691,6 +703,27 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
               <div className="space-y-4">
                 <FieldLabel>Opções de envio</FieldLabel>
                 <ToggleRow icon={<Lock className="w-5 h-5" />} title="Liberar só para seguidores" sub="Só seguidores recebem a mensagem. Quem ainda não segue recebe antes um pedido para seguir." on={checkFollow} onToggle={() => setCheckFollow(!checkFollow)} />
+                {checkFollow && triggerSource === "comment" && (
+                  <div className="space-y-3 rounded-2xl border border-border p-4">
+                    <p className="text-[11px] text-muted-foreground">
+                      Quem comentar recebe primeiro um cartão com o botão abaixo. Ao tocar, verificamos se a pessoa segue a
+                      conta: se seguir, recebe a sua mensagem; se não, recebe o pedido para seguir e o botão &quot;Já segui ✅&quot;.
+                      Deixe em branco para usar o texto padrão.
+                    </p>
+                    <div className="space-y-1.5">
+                      <FieldLabel>Título do cartão</FieldLabel>
+                      <TextField value={optinTitle} onChange={setOptinTitle} placeholder="Quer receber? 🎁" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>Texto do cartão</FieldLabel>
+                      <TextField value={optinSubtitle} onChange={setOptinSubtitle} placeholder="Toque no botão abaixo que eu te envio aqui no direct." />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>Texto do botão (até 20 caracteres)</FieldLabel>
+                      <TextField value={optinButton} onChange={v => setOptinButton(v.slice(0, 20))} placeholder="Quero receber" />
+                    </div>
+                  </div>
+                )}
                 <ToggleRow icon={<Eye className="w-5 h-5" />} title='Mostrar "digitando..."' sub="Mostra o aviso de digitando antes de enviar, para parecer mais natural." on={typingIndicator} onToggle={() => setTypingIndicator(!typingIndicator)} />
                 
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-border bg-white/[0.01]">
