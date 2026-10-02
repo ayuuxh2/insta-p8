@@ -14,6 +14,7 @@ const CHECKS: Record<string, (v: string) => boolean> = {
   INSTAGRAM_APP_SECRET: v => /^[0-9a-f]{32}$/i.test(v),
   INSTAGRAM_WEBHOOK_VERIFY_TOKEN: v => v.length >= 16,
   NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI: v => v === "https://cee-automacao.vercel.app/api/instagram/callback",
+  CRON_SECRET: v => v.length >= 16,
 }
 
 export async function GET() {

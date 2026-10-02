@@ -2,22 +2,9 @@
 
 import { ArrowUpRight, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { startInstagramLogin } from "@/lib/instagram-login"
 
-export function LandingPage() {
-  const handleLogin = () => {
-    // Instagram Business Login (Instagram API with Instagram Login). client_id must be the
-    // Instagram app ID from the Instagram product page, not the parent Meta app ID.
-    const params = new URLSearchParams({
-      enable_fb_login: "0",
-      force_authentication: "1",
-      client_id: (process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID || "").trim(),
-      redirect_uri: (process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI || "").trim(),
-      response_type: "code",
-      scope: "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments",
-    })
-    window.location.href = `https://www.instagram.com/oauth/authorize?${params}`
-  }
-
+export function LandingPage({ error }: { error?: string | null }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
       <div className="w-full max-w-sm space-y-5 rounded-xl border border-border bg-card p-6 text-center shadow-sm">
@@ -30,7 +17,8 @@ export function LandingPage() {
             Entre com a conta profissional autorizada para ativar as automações de comentário e DM.
           </p>
         </div>
-        <Button onClick={handleLogin} className="w-full">
+        {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        <Button onClick={startInstagramLogin} className="w-full">
           Conectar Instagram <ArrowUpRight className="size-4" />
         </Button>
       </div>

@@ -8,6 +8,8 @@ function isPublic(request: NextRequest): boolean {
   if (pathname === "/api/auth/login") return true
   // Meta calls the webhook directly; it is protected by the X-Hub-Signature-256 check.
   if (pathname === "/api/instagram/webhook") return true
+  // Vercel Cron; the route checks CRON_SECRET itself.
+  if (pathname.startsWith("/api/cron/")) return true
   // The OAuth redirect only forwards ?code to the dashboard; the token exchange (POST) stays protected.
   if (pathname === "/api/instagram/callback" && request.method === "GET") return true
   return false
