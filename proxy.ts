@@ -4,7 +4,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth"
 // Everything requires the owner session except these.
 function isPublic(request: NextRequest): boolean {
   const { pathname } = request.nextUrl
-  if (pathname === "/login" || pathname === "/privacy") return true
+  if (pathname === "/login" || pathname === "/privacy" || pathname === "/exclusao-de-dados") return true
   if (pathname === "/api/auth/login") return true
   // Meta calls the webhook directly; it is protected by the X-Hub-Signature-256 check.
   if (pathname === "/api/instagram/webhook") return true
