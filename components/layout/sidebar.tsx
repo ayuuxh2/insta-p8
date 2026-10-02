@@ -3,8 +3,9 @@
 import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronLeft, ChevronRight, LogOut, Zap } from "lucide-react"
+import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BrandLogo } from "@/components/brand-logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const NAV = [
@@ -37,8 +38,7 @@ export function Sidebar({ className, username = "usuario", profilePic, onLogout,
     <aside className={cn("flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground", className)} {...props}>
       <div className={cn("flex h-16 items-center border-b border-sidebar-border", collapsed ? "justify-center" : "px-3")}>
         <Link href="/dashboard" onClick={onNavigate} aria-label="CEE Automação — início" className={cn("flex items-center gap-2.5 rounded-lg", !collapsed && "px-2")}>
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"><Zap className="size-4" /></span>
-          {!collapsed && <span className="text-sm font-semibold tracking-tight">CEE Automação</span>}
+          {collapsed ? <BrandLogo variant="icon" className="h-8" /> : <BrandLogo className="h-9" />}
         </Link>
         {!collapsed && onToggle && <button onClick={onToggle} aria-label="Recolher menu" title="Recolher menu" className="ml-auto flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"><ChevronLeft className="size-4" /></button>}
       </div>

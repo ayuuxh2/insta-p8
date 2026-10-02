@@ -6,6 +6,7 @@ import { Loader2, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { BrandLogo } from "@/components/brand-logo"
 
 function LoginForm() {
   const searchParams = useSearchParams()
@@ -38,13 +39,13 @@ function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-center gap-2.5">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Lock className="size-4" />
-        </span>
+      <div className="space-y-4 text-center">
+        <BrandLogo className="mx-auto h-12" />
         <div>
           <h1 className="text-base font-semibold">Painel de automação</h1>
-          <p className="text-xs text-muted-foreground">Acesso restrito ao dono da conta</p>
+          <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+            <Lock className="size-3" /> Acesso restrito ao dono da conta
+          </p>
         </div>
       </div>
       <div className="space-y-2">
