@@ -18,10 +18,11 @@ import {
 import { generateAIReply } from "@/lib/ai-reply"
 import { bumpUnlockAttempt, clearUnlockAttempts, unlockKey } from "@/lib/unlock-tracking"
 
-const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
+// Trim: values pasted into the Vercel dashboard often carry stray whitespace.
+const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN?.trim()
 // Meta signs every webhook POST with HMAC-SHA256 of the raw body. Depending on app setup the
 // signing key is the Instagram app secret or the parent Meta app secret, so accept either.
-const APP_SECRETS = [process.env.INSTAGRAM_APP_SECRET, process.env.META_APP_SECRET].filter(
+const APP_SECRETS = [process.env.INSTAGRAM_APP_SECRET?.trim(), process.env.META_APP_SECRET?.trim()].filter(
   (s): s is string => Boolean(s),
 )
 

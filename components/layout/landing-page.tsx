@@ -10,8 +10,8 @@ export function LandingPage() {
     const params = new URLSearchParams({
       enable_fb_login: "0",
       force_authentication: "1",
-      client_id: process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID || "",
-      redirect_uri: process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI || "",
+      client_id: (process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID || "").trim(),
+      redirect_uri: (process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI || "").trim(),
       response_type: "code",
       scope: "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments",
     })
