@@ -32,7 +32,7 @@ export function IceBreakersManager() {
 
     const handleAdd = () => {
         if (breakers.length >= 4) {
-            toast.error("Maximum 4 Ice Breakers allowed by Instagram")
+            toast.error("O Instagram permite no máximo 4 iniciadores de conversa")
             return
         }
         setBreakers([...breakers, { question: "", response: "" }])
@@ -53,7 +53,7 @@ export function IceBreakersManager() {
 
         // Validation
         if (breakers.some(b => !b.question?.trim() || !b.response?.trim())) {
-            toast.error("Please fill in all fields")
+            toast.error("Preencha todos os campos")
             return
         }
 
@@ -66,12 +66,12 @@ export function IceBreakersManager() {
             })
             const data = await res.json()
             if (data.success) {
-                toast.success("Ice Breakers saved & synced usually!")
+                toast.success("Iniciadores de conversa salvos e sincronizados!")
             } else {
-                toast.error("Failed to save")
+                toast.error("Não foi possível salvar")
             }
         } catch (e) {
-            toast.error("Error saving")
+            toast.error("Erro ao salvar")
         } finally {
             setSaving(false)
         }
@@ -89,8 +89,8 @@ export function IceBreakersManager() {
             return (
                 <div className="space-y-6 max-w-2xl mx-auto">
                     <div className="text-center py-10 border border-border rounded-xl text-muted-foreground bg-card">
-                        <p className="text-sm font-medium">Not connected</p>
-                        <p className="text-xs mt-1">Connect your Instagram account to manage Ice Breakers.</p>
+                        <p className="text-sm font-medium">Instagram não conectado</p>
+                        <p className="text-xs mt-1">Conecte sua conta do Instagram para gerenciar os iniciadores de conversa.</p>
                     </div>
                 </div>
             )
@@ -108,9 +108,9 @@ export function IceBreakersManager() {
         <div className="space-y-6 max-w-4xl mx-auto">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-semibold tracking-[-0.03em] text-foreground">Conversation starters</h2>
+                    <h2 className="text-3xl font-semibold tracking-[-0.03em] text-foreground">Iniciadores de conversa</h2>
                     <p className="text-muted-foreground text-sm">
-                        Questions people see when they start a chat with you.
+                        Perguntas que as pessoas veem quando começam uma conversa com você.
                     </p>
                 </div>
                 <Button
@@ -119,7 +119,7 @@ export function IceBreakersManager() {
                     className="bg-primary text-primary-foreground hover:opacity-90 font-bold"
                 >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                    Save & Sync
+                    Salvar e sincronizar
                 </Button>
             </div>
 
@@ -129,21 +129,21 @@ export function IceBreakersManager() {
                         <div className="flex justify-between items-start gap-4">
                             <div className="flex-1 space-y-3">
                                 <div>
-                                    <label className="text-xs text-muted-foreground font-semibold uppercase">Question</label>
+                                    <label className="text-xs text-muted-foreground font-semibold uppercase">Pergunta</label>
                                     <Input
                                         value={item.question}
                                         onChange={e => handleChange(idx, "question", e.target.value)}
-                                        placeholder="e.g., What are your prices?"
+                                        placeholder="Ex.: Quais são os preços?"
                                         className="bg-background border-input mt-1 focus-visible:ring-ring"
                                         maxLength={80}
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs text-muted-foreground font-semibold uppercase">Auto-Response</label>
+                                    <label className="text-xs text-muted-foreground font-semibold uppercase">Resposta automática</label>
                                     <Textarea
                                         value={item.response}
                                         onChange={e => handleChange(idx, "response", e.target.value)}
-                                        placeholder="The reply users will receive..."
+                                        placeholder="A resposta que a pessoa vai receber..."
                                         className="bg-background border-input mt-1 focus-visible:ring-ring"
                                         rows={2}
                                     />
@@ -153,7 +153,7 @@ export function IceBreakersManager() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleRemove(idx)}
-                                aria-label="Remove ice breaker"
+                                aria-label="Remover iniciador de conversa"
                                 className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             >
                                 <Trash2 className="w-4 h-4" />
@@ -164,7 +164,7 @@ export function IceBreakersManager() {
 
                 {breakers.length === 0 && (
                     <div className="text-center py-10 border border-border rounded-xl text-muted-foreground bg-card">
-                        No ice breakers yet. Add one to get started!
+                        Nenhum iniciador de conversa ainda. Adicione um para começar!
                     </div>
                 )}
 
@@ -174,7 +174,7 @@ export function IceBreakersManager() {
                         onClick={handleAdd}
                         className="w-full border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground"
                     >
-                        <Plus className="w-4 h-4 mr-2" /> Add Question
+                        <Plus className="w-4 h-4 mr-2" /> Adicionar pergunta
                     </Button>
                 )}
             </div>
@@ -182,7 +182,7 @@ export function IceBreakersManager() {
             <div className="bg-muted border border-border p-4 rounded-xl flex gap-3 text-sm text-foreground">
                 <RefreshCw className="w-5 h-5 shrink-0 text-muted-foreground" />
                 <p>
-                    Changes made here are automatically synced to your Instagram Profile. It may take a few minutes for them to appear for all users.
+                    As alterações feitas aqui são sincronizadas automaticamente com seu perfil do Instagram. Pode levar alguns minutos para aparecerem para todo mundo.
                 </p>
             </div>
         </div>

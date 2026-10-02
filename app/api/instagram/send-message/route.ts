@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const { user_id, recipient_id, message } = await request.json()
 
     if (!user_id || !recipient_id || !message) {
-      return NextResponse.json({ error: "Missing required fields: user_id, recipient_id, message" }, { status: 400 })
+      return NextResponse.json({ error: "Campos obrigatórios ausentes: user_id, recipient_id, message" }, { status: 400 })
     }
 
     const supabase = await getSupabaseServerClient()
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     if (userError || !user) {
       console.error("[v0] Failed to get user:", userError)
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
     }
 
     console.log("[v0] Sending DM from", user.username, "to", recipient_id)
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       console.error("[v0] Failed to send message:", data)
-      return NextResponse.json({ error: data.error?.message || "Failed to send message" }, { status: 400 })
+      return NextResponse.json({ error: data.error?.message || "Não foi possível enviar a mensagem" }, { status: 400 })
     }
 
     console.log("[v0] Message sent successfully:", data.message_id)
@@ -89,6 +89,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[v0] Send message error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
   }
 }

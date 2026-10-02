@@ -48,10 +48,10 @@ export function AutomationList({ automations, onDelete, onEdit, onChanged, userI
       body: JSON.stringify({ id: rule.id, is_active: active }),
     })
     if (res.ok) {
-      toast.success(active ? "Automation enabled" : "Automation paused")
+      toast.success(active ? "Automação ativada" : "Automação pausada")
       onChanged()
     } else {
-      toast.error("Failed to update")
+      toast.error("Não foi possível atualizar")
     }
   }
 
@@ -62,10 +62,10 @@ export function AutomationList({ automations, onDelete, onEdit, onChanged, userI
       body: JSON.stringify({ id: rule.id, action: "duplicate" }),
     })
     if (res.ok) {
-      toast.success("Duplicated — the copy starts paused")
+      toast.success("Duplicada — a cópia começa pausada")
       onChanged()
     } else {
-      toast.error("Failed to duplicate")
+      toast.error("Não foi possível duplicar")
     }
   }
 
@@ -75,9 +75,9 @@ export function AutomationList({ automations, onDelete, onEdit, onChanged, userI
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center border border-border bg-muted">
           <Zap className="w-7 h-7 text-muted-foreground" />
         </div>
-        <h3 className="text-base font-bold text-foreground mb-1">No automations yet</h3>
+        <h3 className="text-base font-bold text-foreground mb-1">Nenhuma automação ainda</h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Create your first automation above — it just takes 30 seconds.
+          Crie sua primeira automação acima — leva só 30 segundos.
         </p>
       </div>
     )
@@ -87,7 +87,7 @@ export function AutomationList({ automations, onDelete, onEdit, onChanged, userI
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          Rules
+          Regras
           <span className="bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full text-[10px]">
             {automations.length}
           </span>
@@ -98,7 +98,7 @@ export function AutomationList({ automations, onDelete, onEdit, onChanged, userI
         {globalRules.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-accent-blue ml-1">
-              <Globe className="w-3 h-3" /> Global
+              <Globe className="w-3 h-3" /> Todos os posts
             </div>
             {globalRules.map((rule, idx) => (
               <RuleCard key={rule.id} rule={rule} onDelete={onDelete} onEdit={onEdit} onToggle={handleToggle} onDuplicate={handleDuplicate} index={idx} />
@@ -109,7 +109,7 @@ export function AutomationList({ automations, onDelete, onEdit, onChanged, userI
         {postSpecificRules.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-accent-pink ml-1">
-              <Instagram className="w-3 h-3" /> Post Specific
+              <Instagram className="w-3 h-3" /> Post específico
             </div>
             {postSpecificRules.map((rule, idx) => (
               <RuleCard key={rule.id} rule={rule} onDelete={onDelete} onEdit={onEdit} onToggle={handleToggle} onDuplicate={handleDuplicate} index={idx} mediaUrl={mediaMap[rule.specific_media_id || ""]} isSpecific />
@@ -139,7 +139,7 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
   const responsePreview = isCard
     ? content.card.title
     : isMedia
-      ? `${content.media.type} attachment`
+      ? `${content.media.type === "video" ? "Vídeo" : content.media.type === "image" ? "Imagem" : "Arquivo"} anexado`
       : (content.message?.slice(0, 50) || "") + (content.message?.length > 50 ? "..." : "")
 
   const replyMode = content.reply_mode
@@ -183,14 +183,14 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
                     onClick={() => setConfirming(false)}
                     className="h-7 text-xs text-muted-foreground hover:text-foreground"
                   >
-                    Cancel
+                    Cancelar
                   </Button>
                   <Button
                     size="sm"
                     onClick={() => onDelete(rule.id)}
                     className="h-7 text-xs bg-destructive text-destructive-foreground hover:opacity-90"
                   >
-                    Delete
+                    Excluir
                   </Button>
                 </div>
               ) : (
@@ -200,8 +200,8 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
                     variant="ghost"
                     size="icon"
                     onClick={() => onEdit(rule)}
-                    title="Edit"
-                    aria-label={`Edit ${rule.name}`}
+                    title="Editar"
+                    aria-label={`Editar ${rule.name}`}
                     className="h-7 w-7 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors"
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -210,8 +210,8 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
                     variant="ghost"
                     size="icon"
                     onClick={() => onDuplicate(rule)}
-                    title="Duplicate"
-                    aria-label={`Duplicate ${rule.name}`}
+                    title="Duplicar"
+                    aria-label={`Duplicar ${rule.name}`}
                     className="h-7 w-7 text-foreground/70 hover:text-foreground hover:bg-accent transition-colors"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -220,8 +220,8 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
                     variant="ghost"
                     size="icon"
                     onClick={() => setConfirming(true)}
-                    title="Delete"
-                    aria-label={`Delete ${rule.name}`}
+                    title="Excluir"
+                    aria-label={`Excluir ${rule.name}`}
                     className="h-7 w-7 text-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -229,8 +229,8 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
                   <Switch
                     checked={!isPaused}
                     onCheckedChange={(v) => onToggle(rule, v)}
-                    aria-label={isPaused ? "Resume automation" : "Pause automation"}
-                    title={isPaused ? "Resume automation" : "Pause automation"}
+                    aria-label={isPaused ? "Ativar automação" : "Pausar automação"}
+                    title={isPaused ? "Ativar automação" : "Pausar automação"}
                     className="ml-1 scale-90"
                   />
                 </>
@@ -269,12 +269,12 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
 
             {replyMode === "dm_only" && (
               <Badge variant="secondary" className="bg-accent-blue/10 text-accent-blue border border-accent-blue/30 text-[10px] px-1.5 py-0">
-                <EyeOff className="w-2.5 h-2.5 mr-0.5" /> DM only
+                <EyeOff className="w-2.5 h-2.5 mr-0.5" /> Só DM
               </Badge>
             )}
             {replyMode === "public_only" && (
               <Badge variant="secondary" className="bg-accent-pink/10 text-accent-pink border border-accent-pink/30 text-[10px] px-1.5 py-0">
-                <Megaphone className="w-2.5 h-2.5 mr-0.5" /> Public only
+                <Megaphone className="w-2.5 h-2.5 mr-0.5" /> Só público
               </Badge>
             )}
             {content.delay_seconds > 0 && (
@@ -284,12 +284,12 @@ function RuleCard({ rule, onDelete, onEdit, onToggle, onDuplicate, index, isSpec
             )}
             {content.check_follow && (
                 <Badge variant="secondary" className="bg-secondary text-secondary-foreground border border-border text-[10px] px-1.5 py-0">
-                <Lock className="w-2.5 h-2.5 mr-0.5" /> Follow
+                <Lock className="w-2.5 h-2.5 mr-0.5" /> Só seguidores
               </Badge>
             )}
             {isPaused && (
               <Badge variant="secondary" className="bg-muted text-muted-foreground border border-border text-[10px] px-1.5 py-0">
-                Paused
+                Pausada
               </Badge>
             )}
           </div>

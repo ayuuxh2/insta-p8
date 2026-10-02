@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams
         const userId = searchParams.get("userId")
 
-        if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+        if (!userId) return NextResponse.json({ error: "userId ausente" }, { status: 400 })
 
         const supabase = await getSupabaseServerClient()
         const { data, error } = await supabase
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(data)
     } catch (error) {
         console.error("Ice Breaker GET Error:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+        return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
     }
 }
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         const { userId, iceBreakers } = body // Array of ice breakers
 
         if (!userId || !Array.isArray(iceBreakers)) {
-            return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+            return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
         }
 
         const supabase = await getSupabaseServerClient()
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
             const igResult = await response.json()
             if (igResult.error) {
                 console.error("IG Sync Error", igResult.error)
-                return NextResponse.json({ success: true, warning: "Saved to DB but IG Sync failed", error: igResult.error }, { status: 200 })
+                return NextResponse.json({ success: true, warning: "Salvo no banco, mas a sincronização com o Instagram falhou", error: igResult.error }, { status: 200 })
             }
         }
 
@@ -102,6 +102,6 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error("Ice Breaker POST Error:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+        return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
     }
 }

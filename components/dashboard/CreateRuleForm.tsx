@@ -27,9 +27,9 @@ interface CreateRuleFormProps {
 }
 
 const STEPS = [
-  { key: "trigger", label: "When", sub: "Choose what starts it" },
-  { key: "response", label: "Reply", sub: "Write what people receive" },
-  { key: "settings", label: "Review", sub: "Name and publish" },
+  { key: "trigger", label: "Gatilho", sub: "Escolha o que inicia" },
+  { key: "response", label: "Resposta", sub: "Escreva o que a pessoa recebe" },
+  { key: "settings", label: "Revisar", sub: "Dê um nome e publique" },
 ] as const
 
 export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: CreateRuleFormProps) {
@@ -118,7 +118,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     setTypingIndicator(content.typing_indicator === true)
     
     if (editRule.specific_media_id) {
-      setSelectedReel({ id: editRule.specific_media_id, caption: "Selected post" })
+      setSelectedReel({ id: editRule.specific_media_id, caption: "Post selecionado" })
       setHasSelectedReelOption(true)
     } else {
       setHasSelectedReelOption(false)
@@ -129,8 +129,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   useEffect(() => {
     if (name || isEditing) return
     const isReplyAll = triggerSource === "comment" && triggers.length === 0
-    if (isReplyAll) setName("Reply to every comment")
-    else if (triggers.length > 0) setName(`Reply to "${triggers[0]}"`)
+    if (isReplyAll) setName("Responder a todos os comentários")
+    else if (triggers.length > 0) setName(`Responder "${triggers[0]}"`)
   }, [triggers, name, isEditing, triggerSource])
 
   /* ---------- helpers ---------- */
@@ -166,27 +166,27 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     thenValid,  // step 1
     name.trim().length > 0, // step 2
   ]
-  const sourceLabel = triggerSource === "comment" ? "comment" : triggerSource === "dm" ? "direct message" : "story"
+  const sourceLabel = triggerSource === "comment" ? "um comentário" : triggerSource === "dm" ? "uma mensagem direta" : "um story"
   const validationHint = step === 0
-    ? triggerSource === "comment" && !hasSelectedReelOption ? "Choose a post, reel, or All posts to continue." : needsKeywords && triggers.length === 0 ? "Add at least one keyword to continue." : ""
-    : step === 1 && !thenValid ? "Add the reply people should receive." : step === 2 && !name.trim() ? "Give this workflow a name before publishing." : ""
+    ? triggerSource === "comment" && !hasSelectedReelOption ? "Escolha um post, um reel ou Todos os posts para continuar." : needsKeywords && triggers.length === 0 ? "Adicione pelo menos uma palavra-chave para continuar." : ""
+    : step === 1 && !thenValid ? "Escreva a resposta que a pessoa vai receber." : step === 2 && !name.trim() ? "Dê um nome para esta resposta automática antes de publicar." : ""
 
   /* Plain-language summary sentence */
   const summary = useMemo(() => {
     const isReplyAll = triggerSource === "comment" && triggers.length === 0
     const who =
       triggerSource === "comment"
-        ? isReplyAll ? "anyone comments on your post" : `someone comments ${triggers.length ? `"${triggers[0]}"` : "a keyword"}`
+        ? isReplyAll ? "alguém comentar no seu post" : `alguém comentar ${triggers.length ? `"${triggers[0]}"` : "uma palavra-chave"}`
         : triggerSource === "dm"
-          ? `someone DMs you ${triggers.length ? `"${triggers[0]}"` : "a keyword"}`
-          : storyTriggerType === "mention" ? "someone mentions you in a story"
-            : storyTriggerType === "reaction" ? "someone reacts to your story"
-              : "someone replies to your story"
+          ? `alguém te mandar ${triggers.length ? `"${triggers[0]}"` : "uma palavra-chave"} na DM`
+          : storyTriggerType === "mention" ? "alguém te mencionar em um story"
+            : storyTriggerType === "reaction" ? "alguém reagir ao seu story"
+              : "alguém responder ao seu story"
     const what =
-      replyMode === "public_only" ? "reply publicly"
-        : type === "card" ? "send them a card with buttons"
-          : type === "media" ? `send them ${mediaType === "image" ? "an image" : `a ${mediaType}`}`
-            : "send them a DM"
+      replyMode === "public_only" ? "responder no comentário"
+        : type === "card" ? "enviar um cartão com botões"
+          : type === "media" ? (mediaType === "image" ? "enviar uma imagem" : mediaType === "video" ? "enviar um vídeo" : "enviar um áudio")
+            : "enviar uma DM"
     return { who, what }
   }, [triggerSource, triggers, storyTriggerType, replyMode, type, mediaType])
 
@@ -248,13 +248,13 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
         body: JSON.stringify(isEditing ? { ...payload, id: editRule!.id } : payload),
       })
       if (res.ok) {
-        toast.success(isEditing ? "Automation updated" : "Automation is live")
+        toast.success(isEditing ? "Resposta automática atualizada" : "Resposta automática ativada")
         onSuccess()
       } else {
-        toast.error("Could not save — try again")
+        toast.error("Não foi possível salvar — tente de novo")
       }
     } catch {
-      toast.error("Network error")
+      toast.error("Erro de conexão. Verifique sua internet.")
     } finally {
       setSaving(false)
     }
@@ -263,8 +263,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   return (
     <div className="workflow-builder space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <div><p className="text-xs text-muted-foreground">{isEditing ? "Editing workflow" : "New workflow"}</p><p className="mt-1 text-sm font-semibold capitalize">Started by an Instagram {sourceLabel}</p></div>
-        <span className="rounded-md bg-secondary px-2.5 py-1 text-xs font-medium">Step {step + 1} of {STEPS.length}</span>
+        <div><p className="text-xs text-muted-foreground">{isEditing ? "Editando resposta automática" : "Nova resposta automática"}</p><p className="mt-1 text-sm font-semibold">Começa com {sourceLabel} no Instagram</p></div>
+        <span className="rounded-md bg-secondary px-2.5 py-1 text-xs font-medium">Etapa {step + 1} de {STEPS.length}</span>
       </div>
       {/* ── Sexy Stepper Timeline ── */}
       <div className="relative border-b border-border py-3">
@@ -317,18 +317,18 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
             <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
               <StepHeader
                 number={1}
-                title={triggerSource === "comment" ? "Where should this workflow run?" : triggerSource === "dm" ? "Which messages should start it?" : "Which story action should start it?"}
-                description={triggerSource === "comment" ? "Choose one post, one reel, or apply it everywhere." : "Choose the simple condition that starts this workflow."}
+                title={triggerSource === "comment" ? "Em qual post isso deve funcionar?" : triggerSource === "dm" ? "Quais mensagens ativam a resposta?" : "Qual ação no story ativa a resposta?"}
+                description={triggerSource === "comment" ? "Escolha um post, um reel ou Todos os posts." : "Escolha o que faz esta resposta automática começar."}
               />
 
               {triggerSource === "story" && (
                 <div className="space-y-3">
-                  <FieldLabel>Select Story Interaction Type</FieldLabel>
+                  <FieldLabel>Escolha o tipo de interação no story</FieldLabel>
                   <div className="grid grid-cols-3 gap-3">
                     {([
-                      { key: "mention" as const, icon: <AtSign className="w-5 h-5" />, label: "Mentions me", desc: "Tagged in a story" },
-                      { key: "reaction" as const, icon: <Heart className="w-5 h-5" />, label: "Reacts", desc: "Sends emoji reaction" },
-                      { key: "reply" as const, icon: <MessageSquare className="w-5 h-5" />, label: "Replies", desc: "Text reply to story" },
+                      { key: "mention" as const, icon: <AtSign className="w-5 h-5" />, label: "Me menciona", desc: "Marcou você no story" },
+                      { key: "reaction" as const, icon: <Heart className="w-5 h-5" />, label: "Reage", desc: "Reagiu com emoji" },
+                      { key: "reply" as const, icon: <MessageSquare className="w-5 h-5" />, label: "Responde", desc: "Respondeu o story com texto" },
                     ]).map(({ key, icon, label, desc }) => (
                       <button
                         key={key}
@@ -353,11 +353,11 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
               {triggerSource === "comment" && (
                 <div className="space-y-4">
-                  <FieldLabel>Automate which post or reel?</FieldLabel>
+                  <FieldLabel>Em qual post ou reel?</FieldLabel>
                   {loadingReels ? (
                     <div className="p-8 flex flex-col items-center justify-center gap-3 border border-border rounded-2xl bg-white/[0.01]">
                       <Loader2 className="w-6 h-6 animate-spin text-accent-yellow-foreground" />
-                      <span className="text-xs text-muted-foreground font-mono-ui">Fetching Instagram feed...</span>
+                      <span className="text-xs text-muted-foreground font-mono-ui">Carregando seus posts do Instagram...</span>
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3 max-h-[55vh] sm:max-h-[420px] overflow-y-auto pr-1 pb-1">
@@ -375,8 +375,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                                                 }`}
                                               >
                                                 <Globe className="w-6 h-6 mb-2 text-accent-blue" />
-                                                <span className="text-xs font-bold text-foreground">All Posts & Reels</span>
-                                                <span className="text-[10px] text-muted-foreground mt-1 font-mono-ui">Global Trigger</span>
+                                                <span className="text-xs font-bold text-foreground">Todos os posts</span>
+                                                <span className="text-[10px] text-muted-foreground mt-1 font-mono-ui">Posts e reels</span>
                                               </button>
 
                       {reels.map((reel) => {
@@ -427,7 +427,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
                                                       {/* Caption snippet at bottom — white text on dark gradient for contrast in BOTH themes */}
                                                       <div className="absolute inset-x-0 bottom-0 px-2 pt-6 pb-2 pointer-events-none">
-                                                        <p className="text-[10px] text-white line-clamp-1 font-sans drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{reel.caption || "Untitled"}</p>
+                                                        <p className="text-[10px] text-white line-clamp-1 font-sans drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{reel.caption || "Sem legenda"}</p>
                                                       </div>
                                                     </button>
                         )
@@ -442,33 +442,33 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 <div className="space-y-4 pt-3 border-t border-border animate-in fade-in slide-in-from-top-2 duration-300">
                   {triggerSource === "comment" ? (
                     <div className="space-y-2">
-                      <FieldLabel>Keywords to match</FieldLabel>
+                      <FieldLabel>Palavras-chave</FieldLabel>
                       <p className="text-[11px] text-muted-foreground">
-                        What keyword triggers this DM? <span className="text-accent-yellow-foreground font-semibold">Keep empty to reply to every comment.</span>
+                        Qual palavra no comentário ativa a resposta? <span className="text-accent-yellow-foreground font-semibold">Deixe vazio para responder a todos os comentários.</span>
                       </p>
                       <TagInput
                         value={triggers}
                         onChange={setTriggers}
-                        placeholder="type keyword, press Enter (e.g. guide)"
+                        placeholder="digite a palavra e aperte Enter (ex.: quero)"
                       />
                     </div>
                   ) : needsKeywords ? (
                     <div className="space-y-2 bg-muted/40 p-5 rounded-2xl border border-border">
                       <FieldLabel>
                         {triggerSource === "story" && storyTriggerType === "reaction"
-                          ? "Only react on these emojis"
-                          : "Trigger keywords"}
+                          ? "Só responder a estes emojis"
+                          : "Palavras-chave do gatilho"}
                       </FieldLabel>
                       <p className="text-[11px] text-muted-foreground mb-3">
                         {triggerSource === "story" && storyTriggerType === "reaction"
-                          ? "Leave empty to trigger on any emoji reaction."
-                          : "Matches exact phrases or words (case-insensitive)."}
+                          ? "Deixe vazio para responder a qualquer reação."
+                          : "Funciona com a palavra ou frase exata (maiúsculas e minúsculas tanto faz)."}
                       </p>
                       <TagInput
                         value={triggers}
                         onChange={setTriggers}
                         placeholder={
-                          triggerSource === "story" && storyTriggerType === "reaction" ? "e.g. ❤️, 🔥, 👍" : "type keyword, press Enter (e.g. price)"
+                          triggerSource === "story" && storyTriggerType === "reaction" ? "ex.: ❤️, 🔥, 👍" : "digite a palavra e aperte Enter (ex.: preço)"
                         }
                       />
                     </div>
@@ -477,8 +477,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                   {triggerSource === "comment" && triggers.length > 0 && (
                     <ToggleRow
                       icon={<MessageSquare className="w-5 h-5" />}
-                      title="Check replies to comments"
-                      sub="Normally only primary post comments trigger replies"
+                      title="Incluir respostas a comentários"
+                      sub="Normalmente só os comentários principais do post ativam a resposta."
                       on={includeReplies}
                       onToggle={() => setIncludeReplies(!includeReplies)}
                     />
@@ -493,18 +493,18 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
             <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
               <StepHeader
                 number={2}
-                title="What should people receive?"
-                description="Choose one reply format, then write the message exactly as it should be sent."
+                title="O que a pessoa vai receber?"
+                description="Escolha o formato e escreva a mensagem do jeitinho que ela vai ser enviada."
               />
 
               {triggerSource === "comment" && (
                 <div className="space-y-2">
-                  <FieldLabel>Flow direction</FieldLabel>
+                  <FieldLabel>Onde responder</FieldLabel>
                   <div className="grid grid-cols-3 gap-2">
                     {([
-                      { key: "both" as const, label: "Reply + DM" },
-                      { key: "public_only" as const, label: "Reply only" },
-                      { key: "dm_only" as const, label: "DM only" },
+                      { key: "both" as const, label: "Comentário + DM" },
+                      { key: "public_only" as const, label: "Só comentário" },
+                      { key: "dm_only" as const, label: "Só DM" },
                     ]).map(({ key, label }) => (
                       <button
                         key={key}
@@ -523,21 +523,21 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
               {triggerSource === "comment" && replyMode !== "dm_only" && (
                 <div className="space-y-2 bg-muted/40 p-5 rounded-2xl border border-border">
-                  <FieldLabel>Public comments rotation</FieldLabel>
-                  <p className="text-[11px] text-muted-foreground mb-3">Add multiple phrases. We rotate them dynamically to look human.</p>
-                  <TagInput value={publicReplies} onChange={setPublicReplies} placeholder={'e.g. "Sent you a DM!", "Check your inbox!"'} />
+                  <FieldLabel>Resposta pública no comentário</FieldLabel>
+                  <p className="text-[11px] text-muted-foreground mb-3">Adicione várias frases. A gente alterna entre elas para parecer mais natural.</p>
+                  <TagInput value={publicReplies} onChange={setPublicReplies} placeholder={'ex.: "Te mandei na DM!", "Confere sua DM 😉"'} />
                 </div>
               )}
 
               {replyMode !== "public_only" && (
                 <div className="space-y-5 pt-2">
                   <div className="space-y-2">
-                    <FieldLabel>Direct Message Format</FieldLabel>
+                    <FieldLabel>Formato da DM</FieldLabel>
                     <div className="grid grid-cols-3 gap-3">
                       {([
-                        { key: "text" as const, icon: <MessageCircle className="w-4.5 h-4.5" />, label: "Text Only" },
-                        { key: "card" as const, icon: <Link2 className="w-4.5 h-4.5" />, label: "Card / Link" },
-                        { key: "media" as const, icon: <ImageIcon className="w-4.5 h-4.5" />, label: "Rich Media" },
+                        { key: "text" as const, icon: <MessageCircle className="w-4.5 h-4.5" />, label: "Só texto" },
+                        { key: "card" as const, icon: <Link2 className="w-4.5 h-4.5" />, label: "Cartão / Link" },
+                        { key: "media" as const, icon: <ImageIcon className="w-4.5 h-4.5" />, label: "Mídia" },
                       ]).map(({ key, icon, label }) => (
                         <button
                           key={key}
@@ -556,14 +556,14 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
                   {type === "text" && (
                     <div className="space-y-2">
-                      <FieldLabel>DM Message Text</FieldLabel>
+                      <FieldLabel>Mensagem da DM</FieldLabel>
                       <textarea
                         value={messageText}
                         onChange={(e) => setMessageText(e.target.value)}
                         rows={5}
                         maxLength={1000}
                         className="w-full bg-muted/30 border border-border rounded-2xl px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:border-accent-yellow/50 transition-colors"
-                        placeholder="Type the message to send in DMs..."
+                        placeholder="Ex.: Oi! Aqui está o link com 10% de desconto pra você: ..."
                       />
                       <p className="font-mono-ui text-[10px] text-muted-foreground text-right">{messageText.length}/1000</p>
                     </div>
@@ -572,17 +572,17 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                   {type === "card" && (
                     <div className="space-y-4">
                       <div className="space-y-3">
-                        <FieldLabel>Card configuration</FieldLabel>
-                        <TextField value={cardTitle} onChange={setCardTitle} placeholder="Card main title" />
-                        <TextField value={cardSubtitle} onChange={setCardSubtitle} placeholder="Subtitle description (optional)" />
-                        <TextField value={cardImage} onChange={setCardImage} placeholder="Cover image URL (optional)" />
+                        <FieldLabel>Cartão</FieldLabel>
+                        <TextField value={cardTitle} onChange={setCardTitle} placeholder="Título (ex.: Frete grátis só hoje!)" />
+                        <TextField value={cardSubtitle} onChange={setCardSubtitle} placeholder="Subtítulo (opcional)" />
+                        <TextField value={cardImage} onChange={setCardImage} placeholder="Link da imagem (opcional)" />
                       </div>
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between border-b border-border pb-2">
-                          <FieldLabel>Interactive buttons ({buttons.length}/3)</FieldLabel>
+                          <FieldLabel>Botões ({buttons.length}/3)</FieldLabel>
                           <button type="button" onClick={addButton} disabled={buttons.length >= 3}
                             className="font-mono-ui text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40 flex items-center gap-1 transition-colors">
-                            <Plus className="w-3 h-3" /> Add button
+                            <Plus className="w-3 h-3" /> Adicionar botão
                           </button>
                         </div>
                         {buttons.map((btn) => (
@@ -591,21 +591,21 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                               value={btn.title}
                               onChange={(e) => updateButton(btn.id, "title", e.target.value)}
                               className="h-8 text-xs flex-1 bg-transparent border-none px-2 text-foreground placeholder:text-muted-foreground focus:outline-none"
-                              placeholder="Button label"
+                              placeholder="Texto do botão (ex.: Ver produto)"
                             />
                             <select
                               value={btn.type}
                               onChange={(e) => updateButton(btn.id, "type", e.target.value)}
                               className="h-8 text-[11px] bg-black border border-border rounded-lg px-2 text-foreground focus:outline-none"
                             >
-                              <option value="web_url">Open Link</option>
-                              <option value="postback">Trigger Flow</option>
+                              <option value="web_url">Abrir link</option>
+                              <option value="postback">Acionar resposta</option>
                             </select>
                             <input
                               value={btn.type === "web_url" ? btn.url : btn.payload}
                               onChange={(e) => updateButton(btn.id, btn.type === "web_url" ? "url" : "payload", e.target.value)}
                               className="h-8 text-xs flex-1 bg-transparent border-none px-2 text-foreground placeholder:text-muted-foreground focus:outline-none font-mono"
-                              placeholder={btn.type === "web_url" ? "https://link" : "flow_keyword"}
+                              placeholder={btn.type === "web_url" ? "https://sualoja.com.br" : "palavra-chave da resposta"}
                             />
                             <button type="button" onClick={() => removeButton(btn.id)} className="text-muted-foreground hover:text-red-400 p-1.5 transition-colors">
                               <Trash2 className="w-4 h-4" />
@@ -619,7 +619,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                   {type === "media" && (
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <FieldLabel>Select File Type</FieldLabel>
+                        <FieldLabel>Tipo de mídia</FieldLabel>
                         <div className="grid grid-cols-3 gap-2">
                           {(["image", "video", "audio"] as const).map((m) => (
                             <button
@@ -630,23 +630,23 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                                 mediaType === m ? "border-accent-yellow bg-accent-yellow/10 text-accent-yellow-foreground" : "border-border text-muted-foreground hover:text-foreground"
                               }`}
                             >
-                              {m === "image" ? "Photo" : m === "video" ? "Video" : "Audio"}
+                              {m === "image" ? "Foto" : m === "video" ? "Vídeo" : "Áudio"}
                             </button>
                           ))}
                         </div>
                       </div>
-                      <TextField value={mediaUrl} onChange={setMediaUrl} placeholder="Link to public media file (e.g. mp4, jpg)" />
-                      <TextField value={messageText} onChange={setMessageText} placeholder="Optional caption message to send after..." />
+                      <TextField value={mediaUrl} onChange={setMediaUrl} placeholder="Link público do arquivo (ex.: .jpg, .mp4)" />
+                      <TextField value={messageText} onChange={setMessageText} placeholder="Mensagem para enviar depois da mídia (opcional)" />
                     </div>
                   )}
 
                   {type !== "card" && (
                     <div className="space-y-3 pt-2">
                       <div className="flex items-center justify-between border-b border-border pb-2">
-                        <FieldLabel>Quick Reply chips ({quickReplies.length}/4)</FieldLabel>
+                        <FieldLabel>Respostas rápidas ({quickReplies.length}/4)</FieldLabel>
                         <button type="button" onClick={addQuickReply} disabled={quickReplies.length >= 4}
                           className="font-mono-ui text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40 flex items-center gap-1 transition-colors">
-                          <Plus className="w-3 h-3" /> Add chip
+                          <Plus className="w-3 h-3" /> Adicionar
                         </button>
                       </div>
                       {quickReplies.length > 0 && (
@@ -658,7 +658,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                                 onChange={(e) => updateQuickReply(q.id, e.target.value)}
                                 maxLength={20}
                                 className="h-10 text-xs flex-1 bg-muted/30 border border-border rounded-xl px-4 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent-yellow/50"
-                                placeholder='e.g. "Send Details!"'
+                                placeholder='ex.: "Quero saber mais!"'
                               />
                               <button type="button" onClick={() => removeQuickReply(q.id)} className="text-muted-foreground hover:text-red-400 p-1.5 transition-colors">
                                 <Trash2 className="w-4 h-4" />
@@ -679,19 +679,19 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
             <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
               <StepHeader
                 number={3}
-                title="Review and publish"
-                description="Give the workflow a clear internal name and confirm optional delivery rules."
+                title="Revisar e publicar"
+                description="Dê um nome fácil de reconhecer e confira as opções de envio."
               />
 
               <div className="space-y-2">
-                <FieldLabel>Workflow name</FieldLabel>
-                <TextField value={name} onChange={setName} placeholder='e.g. "Send the free guide"' />
+                <FieldLabel>Nome da resposta automática</FieldLabel>
+                <TextField value={name} onChange={setName} placeholder='ex.: "Enviar cupom de desconto"' />
               </div>
 
               <div className="space-y-4">
-                <FieldLabel>Delivery options</FieldLabel>
-                <ToggleRow icon={<Lock className="w-5 h-5" />} title="Follow gate required" sub="Only followers get the payload. Non-followers get follow prompt first." on={checkFollow} onToggle={() => setCheckFollow(!checkFollow)} />
-                <ToggleRow icon={<Eye className="w-5 h-5" />} title="Mimic active typing status" sub="Displays typing bubble indicators to look completely organic." on={typingIndicator} onToggle={() => setTypingIndicator(!typingIndicator)} />
+                <FieldLabel>Opções de envio</FieldLabel>
+                <ToggleRow icon={<Lock className="w-5 h-5" />} title="Liberar só para seguidores" sub="Só seguidores recebem a mensagem. Quem ainda não segue recebe antes um pedido para seguir." on={checkFollow} onToggle={() => setCheckFollow(!checkFollow)} />
+                <ToggleRow icon={<Eye className="w-5 h-5" />} title='Mostrar "digitando..."' sub="Mostra o aviso de digitando antes de enviar, para parecer mais natural." on={typingIndicator} onToggle={() => setTypingIndicator(!typingIndicator)} />
                 
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-border bg-white/[0.01]">
                   <div className="flex items-center gap-3">
@@ -699,8 +699,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                       <Timer className="w-4.5 h-4.5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Randomized delivery delay</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Waits before sending to simulate real human delays.</p>
+                      <p className="text-sm font-semibold text-foreground">Atraso antes de responder</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Espera alguns segundos antes de enviar, como uma pessoa faria.</p>
                     </div>
                   </div>
                   <select
@@ -708,11 +708,11 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                     onChange={(e) => setDelaySeconds(Number(e.target.value))}
                     className="bg-black border border-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none hover:border-border transition-all cursor-pointer"
                   >
-                    <option value={0}>Send Immediately</option>
-                    <option value={3}>3s delay</option>
-                    <option value={5}>5s delay</option>
-                    <option value={10}>10s delay</option>
-                    <option value={30}>30s delay</option>
+                    <option value={0}>Enviar na hora</option>
+                    <option value={3}>3 segundos</option>
+                    <option value={5}>5 segundos</option>
+                    <option value={10}>10 segundos</option>
+                    <option value={30}>30 segundos</option>
                   </select>
                 </div>
               </div>
@@ -721,10 +721,10 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
               <div className="rounded-2xl border border-accent-yellow/15 bg-accent-yellow/[0.03] p-5 space-y-2">
                               <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-accent-yellow-foreground" />
-                                <span className="text-xs font-mono-ui uppercase tracking-widest text-accent-yellow-foreground font-bold">Rule Logic Summary</span>
+                                <span className="text-xs font-mono-ui uppercase tracking-widest text-accent-yellow-foreground font-bold">Resumo da regra</span>
                               </div>
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                When <span className="text-foreground font-semibold underline decoration-accent-yellow/40 decoration-2">{summary.who}</span>, we will <span className="text-accent-yellow-foreground font-semibold">{summary.what}</span>.
+                                Quando <span className="text-foreground font-semibold underline decoration-accent-yellow/40 decoration-2">{summary.who}</span>, vamos <span className="text-accent-yellow-foreground font-semibold">{summary.what}</span>.
                               </p>
               </div>
             </div>
@@ -739,7 +739,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 className="flex items-center gap-2 h-10 px-4 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground text-xs font-medium transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Back
+                Voltar
               </button>
             ) : <div />}
 
@@ -751,7 +751,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 disabled={!stepValid[step]}
                 className="flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ml-auto"
               >
-                Continue
+                Continuar
                 <ChevronRight className="w-4 h-4" />
               </button>
             ) : (
@@ -762,7 +762,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 className="flex items-center justify-center gap-2 h-10 px-5 rounded-lg bg-primary text-primary-foreground text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ml-auto"
               >
                 {saving ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <Zap className="w-4 h-4 stroke-[2.5]" />}
-                {saving ? "Saving..." : isEditing ? "Save workflow" : "Publish workflow"}
+                {saving ? "Salvando..." : isEditing ? "Salvar" : "Publicar"}
               </button>
             )}
           </div>
@@ -772,7 +772,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
         {step === 1 && replyMode !== "public_only" && (
           <div className="hidden lg:block sticky top-6 dark">
             <div className="text-center mb-3">
-              <span className="font-mono-ui text-[10px] uppercase tracking-[0.25em] text-neutral-400 font-bold">Interactive Preview</span>
+              <span className="font-mono-ui text-[10px] uppercase tracking-[0.25em] text-neutral-400 font-bold">Pré-visualização</span>
             </div>
             
             {/* iPhone Outer Frame — sized to fit the 300px right rail without overflowing */}
@@ -806,7 +806,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                   </div>
                   <div className="leading-tight">
                     <p className="text-[11px] font-semibold text-foreground truncate max-w-[100px]">@{userId ? "test_creator" : "creator"}</p>
-                    <p className="text-[8px] text-green-500 font-medium">Active now</p>
+                    <p className="text-[8px] text-green-500 font-medium">Online agora</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3.5 text-foreground">
@@ -829,7 +829,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 {/* Typing indicator simulator */}
                 {typingIndicator && (
                   <div className="flex justify-end pr-1 animate-pulse">
-                    <span className="text-[9px] text-muted-foreground font-mono-ui italic">typing indicator active...</span>
+                    <span className="text-[9px] text-muted-foreground font-mono-ui italic">digitando...</span>
                   </div>
                 )}
 
@@ -839,7 +839,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                     <div className="max-w-[80%] space-y-1.5 flex flex-col items-end">
                       {type === "text" && (
                         <div className="bg-[#3797f0] text-foreground rounded-2xl rounded-br-sm px-4 py-2.5 text-xs whitespace-pre-wrap break-words leading-relaxed shadow-lg">
-                          {messageText || "Type message content..."}
+                          {messageText || "Digite a mensagem..."}
                         </div>
                       )}
                       {type === "card" && (
@@ -848,7 +848,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                             <img src={cardImage} alt="" className="w-full h-24 object-cover" loading="lazy" />
                           )}
                           <div className="p-3">
-                            <p className="text-xs font-bold text-foreground line-clamp-1">{cardTitle || "Card Title"}</p>
+                            <p className="text-xs font-bold text-foreground line-clamp-1">{cardTitle || "Título do cartão"}</p>
                             {cardSubtitle && <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 leading-tight">{cardSubtitle}</p>}
                           </div>
                           {buttons.filter((b) => b.title).map((b) => (
@@ -865,7 +865,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                           ) : (
                             <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
                               <ImageIcon className="w-6 h-6" />
-                              <span className="text-[9px] uppercase font-mono-ui tracking-wider">{mediaType}</span>
+                              <span className="text-[9px] uppercase font-mono-ui tracking-wider">{mediaType === "image" ? "Foto" : mediaType === "video" ? "Vídeo" : "Áudio"}</span>
                             </div>
                           )}
                         </div>
@@ -878,7 +878,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 ) : (
                   <div className="flex justify-end animate-pulse">
                     <div className="border border-dashed border-border bg-white/[0.01] rounded-2xl px-4 py-3 text-[10px] text-muted-foreground font-mono-ui italic text-center w-full">
-                      Configure step 2 to build payload
+                      Preencha a etapa 2 para ver a mensagem aqui
                     </div>
                   </div>
                 )}
@@ -899,7 +899,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
               <div className="h-12 bg-neutral-950 border-t border-border flex items-center justify-between px-5 text-muted-foreground">
                 <Camera className="w-4 h-4" />
                 <div className="flex-1 max-w-[150px] h-7 bg-muted border border-border rounded-full px-3 flex items-center justify-between text-[9px] text-muted-foreground">
-                  <span>Message...</span>
+                  <span>Mensagem...</span>
                   <Smile className="w-3 h-3" />
                 </div>
                 <Mic className="w-4 h-4" />
@@ -926,12 +926,12 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 function incomingMsg(triggerSource: string, triggers: string[]): string {
   const primaryKw = triggers.length > 0 ? triggers[0] : null
   if (triggerSource === "comment") {
-    return primaryKw ? `Commented "${primaryKw}"` : "Commented on post"
+    return primaryKw ? `Comentou "${primaryKw}"` : "Comentou no seu post"
   }
   if (triggerSource === "story") {
-    return "Interacted with your Story"
+    return "Interagiu com seu story"
   }
-  return primaryKw ? `DMed keyword "${primaryKw}"` : "Sent you a message"
+  return primaryKw ? `Mandou "${primaryKw}" na DM` : "Te enviou uma mensagem"
 }
 
 function hasDMContent(type: string, messageText: string, cardTitle: string, mediaUrl: string): boolean {
@@ -946,7 +946,7 @@ function StepHeader({ number, title, description }: { number: number; title: str
     <div className="border-b border-border pb-4">
       <div className="flex items-center gap-2 mb-1.5">
         <div className="px-2 py-0.5 rounded-md bg-secondary text-[10px] font-medium text-muted-foreground">
-          Step {number}
+          Etapa {number}
         </div>
       </div>
       <h3 className="text-xl font-semibold text-foreground tracking-tight">{title}</h3>

@@ -38,7 +38,7 @@ function isValidSignature(rawBody: string, signatureHeader: string | null): bool
   })
 }
 
-const DEFAULT_PUBLIC_REPLIES = ["Check your DMs! 📥", "Sent! 🔥", "Check inbox! ✨"]
+const DEFAULT_PUBLIC_REPLIES = ["Te mandei no direct! 📩", "Enviado na sua DM! 🔥", "Confere seu direct! ✨", "Já te chamei no direct 😉"]
 
 // Max times we'll send the gate card for an unverifiable follow status on a single unlock event.
 // After this, we send a single "couldn't verify your follow" message and stop spamming the user.
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   if (mode === "subscribe" && WEBHOOK_VERIFY_TOKEN && token === WEBHOOK_VERIFY_TOKEN && challenge) {
     return new NextResponse(challenge, { status: 200 })
   }
-  return NextResponse.json({ error: "Invalid token" }, { status: 403 })
+  return NextResponse.json({ error: "Token inválido" }, { status: 403 })
 }
 
 // ============================================================
@@ -131,9 +131,9 @@ async function sendAutomationResponse(
 
 function responsePreviewText(content: any): string {
   if (content.message) return content.message
-  if (content.card) return `[Card] ${content.card.title}`
+  if (content.card) return `[Cartão] ${content.card.title}`
   if (content.media?.url) return `[${content.media.type || "media"}]`
-  return "[automation]"
+  return "[automação]"
 }
 
 // ============================================================
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
         `[webhook] 401: ${!signature ? "no x-hub-signature-256 header" : "signature mismatch"}; ` +
           `secrets configured: ${APP_SECRETS.length}; received=${signature?.slice(7, 19) ?? "-"} computed=[${computed}] bodyLen=${rawBody.length}`,
       )
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+      return NextResponse.json({ error: "Assinatura inválida" }, { status: 401 })
     }
     const body = JSON.parse(rawBody)
     if (!body.entry) return NextResponse.json({ ok: true })
@@ -699,7 +699,7 @@ export async function POST(request: NextRequest) {
                         } else if (followResult.follows === false) {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] ❌ DM unlock rejected: @${senderId} still doesn't follow`)
-                          const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, title: "❌ Not Following Yet!", subtitle: `We couldn't verify your follow. Please follow @${user.username} and click the button again.` }))
+                          const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, title: "Ainda não encontramos seu follow 🤔", subtitle: `Siga a @${user.username} e toque em "Já segui" de novo.` }))
                           const conv = await incomingSaved
                           if (result?.ok && conv) {
                             try {
@@ -709,7 +709,7 @@ export async function POST(request: NextRequest) {
                                 user_id: user.id,
                                 sender_id: user.business_account_id,
                                 sender_username: user.username,
-                                content: "[Verification Failed]",
+                                content: "[Verificação falhou]",
                                 is_from_instagram: false,
                               })
                             } catch (e) {
@@ -725,7 +725,7 @@ export async function POST(request: NextRequest) {
                                                     const result = await sendTextDM(
                                                       user.access_token,
                                                       { id: senderId },
-                                                      "⚠️ We couldn't verify your follow yet. Please reach out if this keeps happening.",
+                                                      "Não conseguimos confirmar seu follow agora. Tente de novo em alguns minutos 🙏",
                                                     )
                                                     const conv = await incomingSaved
                                                     if (result?.ok && conv) {
@@ -736,7 +736,7 @@ export async function POST(request: NextRequest) {
                                                           user_id: user.id,
                                                           sender_id: user.business_account_id,
                                                           sender_username: user.username,
-                                                          content: "[Verification Unavailable — capped]",
+                                                          content: "[Verificação indisponível — limite atingido]",
                                                           is_from_instagram: false,
                                                         })
                                                       } catch (e) {
@@ -745,7 +745,7 @@ export async function POST(request: NextRequest) {
                                                     }
                                                   } else {
                                                     console.warn(`[webhook] ⚠️ DM unlock unverifiable (attempt ${attempts}/${UNLOCK_GATE_MAX_ATTEMPTS}) for @${senderId}`)
-                                                    const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` }))
+                                                    const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, subtitle: `Siga a @${user.username} e toque em "Já segui" para receber.` }))
                                                     const conv = await incomingSaved
                                                     if (result?.ok && conv) {
                                                       try {
@@ -755,7 +755,7 @@ export async function POST(request: NextRequest) {
                                                           user_id: user.id,
                                                           sender_id: user.business_account_id,
                                                           sender_username: user.username,
-                                                          content: `[Locked Content Gate — attempt ${attempts}/${UNLOCK_GATE_MAX_ATTEMPTS}]`,
+                                                          content: `[Conteúdo bloqueado — tentativa ${attempts}/${UNLOCK_GATE_MAX_ATTEMPTS}]`,
                                                           is_from_instagram: false,
                                                         })
                                                       } catch (e) {
@@ -791,7 +791,7 @@ export async function POST(request: NextRequest) {
                         } else if (followResult.follows === false) {
                           await clearUnlockAttempts(attemptKey)
                           console.log(`[webhook] 🔒 DM follower gate: @${senderId} doesn't follow @${user.username}`)
-                          const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, subtitle: `Please follow @${user.username} to see this!` }))
+                          const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, subtitle: `Siga a @${user.username} e toque em "Já segui" para receber.` }))
                           const conv = await incomingSaved
                           if (result?.ok && conv) {
                             try {
@@ -801,7 +801,7 @@ export async function POST(request: NextRequest) {
                                 user_id: user.id,
                                 sender_id: user.business_account_id,
                                 sender_username: user.username,
-                                content: "[Locked Content Gate]",
+                                content: "[Conteúdo bloqueado]",
                                 is_from_instagram: false,
                               })
                             } catch (e) {
@@ -815,7 +815,7 @@ export async function POST(request: NextRequest) {
                           const isAuthError = followResult.error === 'auth'
                           if (isAuthError) {
                             console.warn(`[webhook] ⚠️ DM follower gate auth failure for @${senderId}; sending gate`)
-                            const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, title: "❌ Verification Failed", subtitle: `We can't verify your follow status. Please follow @${user.username} and try again.` }))
+                            const result = await sendCardDM(user.access_token, { id: senderId }, buildFollowGateCard({ username: user.username, ruleId: match.id, title: "Não conseguimos verificar 🤔", subtitle: `Siga a @${user.username} e toque em "Já segui" para tentar de novo.` }))
                             const conv = await incomingSaved
                             if (result?.ok && conv) {
                               try {
@@ -825,7 +825,7 @@ export async function POST(request: NextRequest) {
                                   user_id: user.id,
                                   sender_id: user.business_account_id,
                                   sender_username: user.username,
-                                  content: "[Auth Failure — Gate Sent]",
+                                  content: "[Falha de autenticação — bloqueio enviado]",
                                   is_from_instagram: false,
                                 })
                               } catch (e) {

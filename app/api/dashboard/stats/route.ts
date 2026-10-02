@@ -4,7 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server"
 export async function GET(request: NextRequest) {
     try {
         const userId = request.nextUrl.searchParams.get("userId")
-        if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+        if (!userId) return NextResponse.json({ error: "userId ausente" }, { status: 400 })
 
         const supabase = await getSupabaseServerClient()
 
@@ -65,6 +65,6 @@ export async function GET(request: NextRequest) {
         })
     } catch (error) {
         console.error("[v0] Dashboard Stats error:", error)
-        return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 })
+        return NextResponse.json({ error: "Não foi possível carregar as estatísticas" }, { status: 500 })
     }
 }

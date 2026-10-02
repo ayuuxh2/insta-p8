@@ -18,14 +18,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  return NextResponse.json({ error: "Invalid callback" }, { status: 400 })
+  return NextResponse.json({ error: "Callback inválido" }, { status: 400 })
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { code } = body
-    if (!code) return NextResponse.json({ error: "No code" }, { status: 400 })
+    if (!code) return NextResponse.json({ error: "Código ausente" }, { status: 400 })
 
     // 1. Env Vars
     const clientId = process.env.INSTAGRAM_APP_ID?.trim()
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const redirectUri = process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI?.trim()
 
     if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error("Missing Env Vars: Check INSTAGRAM_APP_ID")
+      throw new Error("Variáveis de ambiente ausentes: verifique INSTAGRAM_APP_ID")
     }
 
     // 2. Exchange Code for Short Token
@@ -55,10 +55,10 @@ export async function POST(request: NextRequest) {
     if (!tokenRes.ok) {
       if (tokenData.error_message?.includes("authorization code has been used")) {
         // Harmless double-fire from React StrictMode or double clicks
-        return NextResponse.json({ error: "Code already used" }, { status: 400 })
+        return NextResponse.json({ error: "Código já utilizado" }, { status: 400 })
       }
       console.error("[v0] 🔴 Token Error:", tokenData.error_type, tokenData.error_message)
-      return NextResponse.json({ error: tokenData.error_description || "Token failed" }, { status: 400 })
+      return NextResponse.json({ error: tokenData.error_description || "Falha ao obter o token" }, { status: 400 })
     }
 
     const shortToken = tokenData.access_token

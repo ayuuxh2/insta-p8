@@ -40,7 +40,7 @@ export default function DashboardLayout({
             <div className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 z-50 transition-[width] duration-200 ${sidebarCollapsed ? "md:w-[72px]" : "md:w-64"}`}>
                 <Sidebar
                     className="h-full border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
-                    username={username || "User"}
+                    username={username || "Usuário"}
                     profilePic={profilePic}
                     onLogout={logout}
                     collapsed={sidebarCollapsed}
@@ -52,8 +52,8 @@ export default function DashboardLayout({
             <div className={`flex-1 flex flex-col transition-[padding] duration-200 ${sidebarCollapsed ? "md:pl-[72px]" : "md:pl-64"}`}>
                 {/* Mobile Header (Visible only on small screens) */}
                 <header className="md:hidden h-16 border-b border-border bg-background flex items-center justify-between px-4 sticky top-0 z-40">
-                    <span className="font-serif-display text-xl text-foreground">insta-p8</span>
-                    <MobileNav username={username || "User"} profilePic={profilePic} onLogout={logout} />
+                    <span className="font-serif-display text-xl text-foreground">CEE Automação</span>
+                    <MobileNav username={username || "Usuário"} profilePic={profilePic} onLogout={logout} />
                 </header>
 
                 <main className="dashboard-canvas flex-1 relative overflow-auto">

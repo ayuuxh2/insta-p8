@@ -6,8 +6,8 @@ import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 
 export const metadata: Metadata = {
-  title: "InstaAuto — Instagram Automation",
-  description: "Auto-reply to comments, DMs, and stories with keyword triggers.",
+  title: "CEE Automação",
+  description: "Respostas automáticas para comentários, DMs e Stories do Instagram a partir de palavras-chave.",
   icons: {
     icon: [
       {
@@ -49,7 +49,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         {/* Pre-hydration theme bootstrap — prevents flash of wrong theme */}
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />

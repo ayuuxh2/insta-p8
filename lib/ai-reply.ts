@@ -28,8 +28,8 @@ export async function generateAIReply(
   const model = userModel || process.env.AI_MODEL || (process.env.GROQ_API_KEY ? "llama-3.1-8b-instant" : "gpt-4o-mini")
 
   const systemPrompt = aiContext?.trim()
-    ? `You are replying to Instagram DMs on behalf of this account: ${aiContext.trim()}\n\nRules: max 1 sentence, casual Instagram tone, no hashtags, no emojis unless natural, never reveal you are AI. If you don't know something specific, say you'll get back to them.`
-    : "You are replying to Instagram DMs. Keep replies to 1 short sentence. Casual tone. No hashtags. Never reveal you are AI."
+    ? `You are replying to Instagram DMs on behalf of this account: ${aiContext.trim()}\n\nRules: always reply in Brazilian Portuguese (pt-BR) by default; only if the customer writes in another language, reply in that customer's language. Max 1 sentence, casual Instagram tone, no hashtags, no emojis unless natural, never reveal you are AI. If you don't know something specific, say you'll get back to them.`
+    : "You are replying to Instagram DMs. Always reply in Brazilian Portuguese (pt-BR) by default; only if the customer writes in another language, reply in that customer's language. Keep replies to 1 short sentence. Casual tone. No hashtags. Never reveal you are AI."
 
   try {
     const res = await fetch(endpoint, {

@@ -5,12 +5,12 @@ import { Save, Loader2, Check } from "lucide-react"
 import { useInstagramSession } from "@/hooks/use-instagram-session"
 
 const fields = [
-    ["business_name", "Business name", "What should customers call your business?"],
-    ["business_description", "What you do", "Describe your business and main offer."],
-    ["services", "Services and prices", "List services, products, prices, and key details."],
-    ["hours_location", "Hours and location", "Add opening hours, location, delivery, or service area."],
-    ["policies", "Policies", "Add booking, refund, cancellation, and payment policies."],
-    ["faq", "Frequently asked questions", "Add common customer questions and approved answers."],
+    ["business_name", "Nome do negócio", "Como os clientes chamam o seu negócio?"],
+    ["business_description", "O que você faz", "Descreva seu negócio e o que você vende."],
+    ["services", "Produtos e preços", "Liste produtos, serviços, preços e detalhes importantes."],
+    ["hours_location", "Horário e localização", "Informe horário de funcionamento, endereço, entrega ou região atendida."],
+    ["policies", "Políticas", "Informe as regras de troca, devolução, cancelamento e pagamento."],
+    ["faq", "Perguntas frequentes", "Adicione as dúvidas mais comuns dos clientes e as respostas certas."],
 ] as const
 
 export default function SettingsPage() {
@@ -50,9 +50,9 @@ export default function SettingsPage() {
     return (
         <div className="mx-auto max-w-4xl px-5 py-7 sm:px-8 lg:px-10">
             <div className="border-b border-border pb-7">
-                <p className="text-sm text-muted-foreground">Workspace settings</p>
-                <h1 className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-foreground">Preferences</h1>
-                <p className="mt-2 text-sm text-muted-foreground">Give your assistant accurate business information for better replies.</p>
+                <p className="text-sm text-muted-foreground">Informações do negócio</p>
+                <h1 className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-foreground">Preferências</h1>
+                <p className="mt-2 text-sm text-muted-foreground">Passe informações certinhas do seu negócio para o assistente responder melhor.</p>
             </div>
             <div className="mt-7 space-y-5 rounded-xl border border-border bg-card p-6">
                 {fields.map(([key, label, placeholder]) => (
@@ -64,7 +64,7 @@ export default function SettingsPage() {
             </div>
             <button onClick={save} disabled={saving} className="mt-6 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                {saved ? "Saved" : "Save business knowledge"}
+                {saved ? "Salvo" : "Salvar informações do negócio"}
             </button>
         </div>
     )

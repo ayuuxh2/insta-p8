@@ -7,12 +7,12 @@ type Knowledge = Record<string, string>
 export async function GET(request: NextRequest) {
     const sessionUserId = request.nextUrl.searchParams.get("userId")
     if (!sessionUserId) {
-        return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+        return NextResponse.json({ error: "userId ausente" }, { status: 400 })
     }
 
     const supabase = await getSupabaseServerClient()
     const { data, error } = await supabase.from("users").select("ai_context").eq("id", sessionUserId).single()
-    if (error) return NextResponse.json({ error: "Failed to load business profile" }, { status: 500 })
+    if (error) return NextResponse.json({ error: "Não foi possível carregar o perfil da empresa" }, { status: 500 })
 
     let knowledge: Knowledge = {}
     try {
@@ -27,7 +27,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { userId: sessionUserId, knowledge } = body as { userId?: string; knowledge?: Knowledge }
     if (!sessionUserId || !knowledge || typeof knowledge !== "object" || Array.isArray(knowledge)) {
-        return NextResponse.json({ error: "Invalid request" }, { status: 400 })
+        return NextResponse.json({ error: "Requisição inválida" }, { status: 400 })
     }
 
     const sanitizedKnowledge = Object.fromEntries(
@@ -37,6 +37,6 @@ export async function PUT(request: NextRequest) {
     )
     const supabase = await getSupabaseServerClient()
     const { error } = await supabase.from("users").update({ ai_context: JSON.stringify(sanitizedKnowledge) }).eq("id", sessionUserId)
-    if (error) return NextResponse.json({ error: "Failed to save business profile" }, { status: 500 })
+    if (error) return NextResponse.json({ error: "Não foi possível salvar o perfil da empresa" }, { status: 500 })
     return NextResponse.json({ ok: true })
 }
