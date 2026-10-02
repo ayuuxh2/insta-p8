@@ -26,8 +26,6 @@ export async function GET(request: NextRequest) {
     // Hum '/me' use kar rahe hain taaki ID mismatch ka lafda hi na ho.
     const url = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${user.access_token}`
 
-    console.log("[v0] Fetching Media from:", url)
-
     const res = await fetch(url, { cache: 'no-store' })
     const data = await res.json()
 

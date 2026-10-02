@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         // Harmless double-fire from React StrictMode or double clicks
         return NextResponse.json({ error: "Code already used" }, { status: 400 })
       }
-      console.error("[v0] 🔴 Token Error:", JSON.stringify(tokenData, null, 2))
+      console.error("[v0] 🔴 Token Error:", tokenData.error_type, tokenData.error_message)
       return NextResponse.json({ error: tokenData.error_description || "Token failed" }, { status: 400 })
     }
 
@@ -83,7 +83,6 @@ export async function POST(request: NextRequest) {
         `https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`
       )
       const meData = await meRes.json()
-      console.log("[v0] 📋 /me response:", JSON.stringify(meData))
 
       if (meData.username) username = meData.username
       if (meData.profile_picture_url) profilePic = meData.profile_picture_url
@@ -95,6 +94,16 @@ export async function POST(request: NextRequest) {
       }
     } catch (e) {
       console.error("[v0] /me request failed:", e)
+    }
+
+    // 5. Only accounts listed in ALLOWED_INSTAGRAM_USERNAMES may be connected.
+    const allowed = (process.env.ALLOWED_INSTAGRAM_USERNAMES || "")
+      .split(",")
+      .map(name => name.trim().replace(/^@/, "").toLowerCase())
+      .filter(Boolean)
+    if (!allowed.includes(username.toLowerCase())) {
+      console.warn(`[callback] Rejected Instagram account @${username}: not in ALLOWED_INSTAGRAM_USERNAMES`)
+      return NextResponse.json({ error: `A conta @${username} não está autorizada neste painel` }, { status: 403 })
     }
 
     // 6. Save/Update User
@@ -117,14 +126,7 @@ export async function POST(request: NextRequest) {
 
     if (upsertError) throw upsertError
 
-    const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
-    response.cookies.set("insta_session", JSON.stringify({ username, userId: loginUserId }), {
-      path: "/",
-      maxAge: expiresIn,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    })
-    return response
+    return NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

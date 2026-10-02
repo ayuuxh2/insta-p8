@@ -3,7 +3,7 @@
 import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronLeft, ChevronRight, LifeBuoy, LogOut, Zap } from "lucide-react"
+import { ChevronLeft, ChevronRight, LogOut, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -60,10 +60,6 @@ export function Sidebar({ className, username = "creator", profilePic, onLogout,
           <img src="/icons/profile.svg" alt="" className="size-4 shrink-0 dark:invert" />
           {!collapsed && <span>Preferences</span>}
         </Link>
-        <a href="https://t.me/instagramautomationp8" target="_blank" rel="noopener noreferrer" aria-label={collapsed ? "Help and support" : undefined} title={collapsed ? "Help and support" : undefined} className={itemClass(false)}>
-          <LifeBuoy className="size-4 shrink-0" />
-          {!collapsed && <span>Help and support</span>}
-        </a>
       </nav>
 
       <div className="border-t border-sidebar-border p-3">

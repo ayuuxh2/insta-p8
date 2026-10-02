@@ -3,22 +3,11 @@ import { getSupabaseServerClient } from "@/lib/supabase-server"
 
 type Knowledge = Record<string, string>
 
-function getSessionUserId(request: NextRequest): string | null {
-    try {
-        const raw = request.cookies.get("insta_session")?.value
-        if (!raw) return null
-        const session = JSON.parse(raw) as { userId?: string }
-        return session.userId || null
-    } catch {
-        return null
-    }
-}
-
+// Access is gated by the owner session in proxy.ts.
 export async function GET(request: NextRequest) {
-    const sessionUserId = getSessionUserId(request)
-    const requestedUserId = request.nextUrl.searchParams.get("userId")
-    if (!sessionUserId || !requestedUserId || sessionUserId !== requestedUserId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const sessionUserId = request.nextUrl.searchParams.get("userId")
+    if (!sessionUserId) {
+        return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
 
     const supabase = await getSupabaseServerClient()
@@ -35,11 +24,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-    const sessionUserId = getSessionUserId(request)
     const body = await request.json()
-    const { userId, knowledge } = body as { userId?: string; knowledge?: Knowledge }
-    if (!sessionUserId || !userId || sessionUserId !== userId || !knowledge || typeof knowledge !== "object" || Array.isArray(knowledge)) {
-        return NextResponse.json({ error: "Unauthorized or invalid request" }, { status: 401 })
+    const { userId: sessionUserId, knowledge } = body as { userId?: string; knowledge?: Knowledge }
+    if (!sessionUserId || !knowledge || typeof knowledge !== "object" || Array.isArray(knowledge)) {
+        return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
     const sanitizedKnowledge = Object.fromEntries(

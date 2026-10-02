@@ -191,11 +191,7 @@ export async function POST(request: NextRequest) {
         `[webhook] 401: ${!signature ? "no x-hub-signature-256 header" : "signature mismatch"}; ` +
           `secrets configured: ${APP_SECRETS.length}; received=${signature?.slice(7, 19) ?? "-"} computed=[${computed}] bodyLen=${rawBody.length}`,
       )
-      if (process.env.DISABLE_WEBHOOK_SIGNATURE_CHECK === "true") {
-        console.warn("[webhook] SIGNATURE CHECK BYPASSED — remove DISABLE_WEBHOOK_SIGNATURE_CHECK after debugging")
-      } else {
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
-      }
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
     }
     const body = JSON.parse(rawBody)
     if (!body.entry) return NextResponse.json({ ok: true })
