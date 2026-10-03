@@ -12,6 +12,7 @@ const NAV = [
   { href: "/dashboard", label: "Início", icon: "/icons/home.svg" },
   { href: "/dashboard/automations", label: "Respostas automáticas", icon: "/icons/journal.svg" },
   { href: "/dashboard/inbox", label: "Conversas", icon: "/icons/chat.svg" },
+  { href: "/dashboard/contacts", label: "Contatos", icon: "/icons/contacts.svg" },
   { href: "/dashboard/ice-breakers", label: "Iniciadores de conversa", icon: "/icons/squads.svg" },
   { href: "/dashboard/analytics", label: "Métricas", icon: "/icons/analytics.svg" },
 ]

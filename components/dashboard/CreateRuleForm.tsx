@@ -68,6 +68,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   // Comment rules send the "Quero receber" card first unless this is on (single message, no button).
   const [directSend, setDirectSend] = useState(false)
   const [messageVariants, setMessageVariants] = useState<string[]>([])
+  const [ruleTags, setRuleTags] = useState<string[]>([])
   const [delaySeconds, setDelaySeconds] = useState(0)
   const [typingIndicator, setTypingIndicator] = useState(false)
 
@@ -126,6 +127,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     setOptinButton(content.optin_button || "")
     setDirectSend(content.direct_send === true)
     setMessageVariants(Array.isArray(content.message_variants) ? content.message_variants : [])
+    setRuleTags(Array.isArray(content.add_tags) ? content.add_tags : [])
     setDelaySeconds(Number(content.delay_seconds) || 0)
     setTypingIndicator(content.typing_indicator === true)
     
@@ -210,6 +212,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     const isReplyAll = triggerSource === "comment" && triggers.length === 0
 
     const content: any = { check_follow: checkFollow }
+    if (ruleTags.length) content.add_tags = ruleTags
     if (delaySeconds > 0) content.delay_seconds = delaySeconds
     if (typingIndicator) content.typing_indicator = true
     if (triggerSource === "comment") {
@@ -775,6 +778,12 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                     <option value={30}>30 segundos</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <FieldLabel>Tags automáticas (opcional)</FieldLabel>
+                <p className="text-[11px] text-muted-foreground">Quem disparar esta regra recebe estas tags na tela de Contatos (ex.: churrasco, interessado).</p>
+                <TagInput value={ruleTags} onChange={setRuleTags} placeholder="digite uma tag e aperte Enter" />
               </div>
 
               {triggerSource === "comment" && triggers.length === 0 && (

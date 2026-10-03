@@ -32,6 +32,7 @@ import {
   OPT_OUT_CONFIRMATION,
   OPT_IN_CONFIRMATION,
 } from "@/lib/antispam"
+import { recordEvent, setFollows, addTags, setUsernameIfMissing } from "@/lib/contacts"
 
 // Work continues after the 200 response (see after()); give it room for human-like delays.
 export const maxDuration = 60
@@ -134,18 +135,32 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+/** The first keyword of the rule found in the text, or null. */
+function matchedKeyword(triggerValue: string, text: string): string | null {
+  return (
+    triggerValue
+      .split(",")
+      .map((k: string) => k.trim())
+      .filter(Boolean)
+      .find((k: string) => {
+        try {
+          return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)
+        } catch {
+          return text.includes(k.toLowerCase())
+        }
+      }) || null
+  )
+}
+
 function keywordMatches(triggerValue: string, text: string): boolean {
-  return triggerValue
-    .split(",")
-    .map((k: string) => k.trim())
-    .filter(Boolean)
-    .some((k: string) => {
-      try {
-        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)
-      } catch {
-        return text.includes(k.toLowerCase())
-      }
-    })
+  return matchedKeyword(triggerValue, text) !== null
+}
+
+/** Sends the rule content and records "content_sent" for the contact. */
+async function deliver(db: Db, user: any, senderId: string, rule: any, content: any): Promise<string | null> {
+  const preview = await sendRuleContent(db, user, senderId, content)
+  if (preview) await recordEvent(db, user.id, senderId, "content_sent", { automationId: rule.id })
+  return preview
 }
 
 function responsePreviewText(content: any, message?: string): string {
@@ -261,10 +276,11 @@ async function runFollowGate(db: Db, user: any, senderId: string, rule: any, con
   const attemptKey = unlockKey(senderId, rule.id)
   const follows = await checkFollowsBusiness(token, senderId)
   console.log(`[webhook] Follow gate for ${senderId} / rule ${rule.id}: follows=${follows}${isRecheck ? " (re-check)" : ""}`)
+  if (follows !== null) await setFollows(db, user.id, senderId, follows)
 
   if (follows === true) {
     await clearUnlockAttempts(attemptKey)
-    return sendRuleContent(db, user, senderId, content)
+    return deliver(db, user, senderId, rule, content)
   }
 
   await wait(humanDelayMs({}))
@@ -279,6 +295,7 @@ async function runFollowGate(db: Db, user: any, senderId: string, rule: any, con
         })
       : buildFollowGateCard({ username: user.username, ruleId: rule.id })
     const result = await tracked(db, user, recipient, sendCardDM(token, recipient, card))
+    if (result.ok) await recordEvent(db, user.id, senderId, "gate_sent", { automationId: rule.id })
     return result.ok ? "[Pediu para seguir]" : null
   }
 
@@ -295,6 +312,7 @@ async function runFollowGate(db: Db, user: any, senderId: string, rule: any, con
     return result.ok ? "[Verificação indisponível — limite atingido]" : null
   }
   const result = await tracked(db, user, recipient, sendCardDM(token, recipient, buildFollowGateCard({ username: user.username, ruleId: rule.id })))
+  if (result.ok) await recordEvent(db, user.id, senderId, "gate_sent", { automationId: rule.id })
   return result.ok ? `[Pediu para seguir — verificação indisponível ${attempts}/${UNLOCK_GATE_MAX_ATTEMPTS}]` : null
 }
 
@@ -302,11 +320,11 @@ async function runFollowGate(db: Db, user: any, senderId: string, rule: any, con
 // Inbox bookkeeping
 // ============================================================
 
-async function ensureConversation(db: Db, user: any, senderId: string): Promise<{ id: string } | null> {
+async function ensureConversation(db: Db, user: any, senderId: string): Promise<{ id: string; recipient_username?: string } | null> {
   try {
     const { data: existing } = await db
       .from("conversations")
-      .select("id")
+      .select("id, recipient_username")
       .eq("user_id", user.id)
       .eq("recipient_id", senderId)
       .maybeSingle()
@@ -323,7 +341,7 @@ async function ensureConversation(db: Db, user: any, senderId: string): Promise<
         recipient_username: profile?.username || `cnt_${senderId.slice(0, 5)}...`,
         last_message_at: new Date().toISOString(),
       })
-      .select("id")
+      .select("id, recipient_username")
       .single()
     return created
   } catch (err) {
@@ -448,6 +466,12 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
   console.log(`[webhook] Comment match: "${match.name}"`)
 
   const { optedOut } = await touchContact(db, user.id, senderId, value.from?.username)
+  await recordEvent(db, user.id, senderId, "comment", {
+    automationId: match.id,
+    keyword: match.trigger_type === "keyword" ? matchedKeyword(match.trigger_value, commentText) : null,
+    mediaId,
+  })
+  await addTags(db, user.id, senderId, content.add_tags)
   const replyMode = content.reply_mode || "both"
 
   if (replyMode !== "dm_only") await sendPublicReply(db, user, content, commentId)
@@ -468,7 +492,16 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
     })
     return
   }
-  await sendPrivateReply(db, user, match, content, commentId)
+  await privateReplyAndRecord(db, user, match, content, commentId, senderId)
+}
+
+async function privateReplyAndRecord(db: Db, user: any, rule: any, content: any, commentId: string, senderId: string): Promise<SendResult> {
+  const result = await sendPrivateReply(db, user, rule, content, commentId)
+  if (result.ok) {
+    const direct = content.direct_send === true && content.check_follow !== true
+    await recordEvent(db, user.id, senderId, direct ? "content_sent" : "optin_sent", { automationId: rule.id })
+  }
+  return result
 }
 
 /** Sends queued private replies while the hourly limit allows (oldest first, within 7 days). */
@@ -490,7 +523,7 @@ async function drainPendingReplies(db: Db, user: any, rules: any[]) {
       continue
     }
     if (sent >= PRIVATE_REPLY_HOURLY_LIMIT) return
-    const result = await sendPrivateReply(db, user, rule, parseContent(rule.response_content), item.comment_id)
+    const result = await privateReplyAndRecord(db, user, rule, parseContent(rule.response_content), item.comment_id, item.sender_id)
     if (result.ok || item.attempts >= 2) {
       await db.from("pending_replies").delete().eq("id", item.id)
     } else {
@@ -552,11 +585,13 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
   // processed again as a DM keyword (it used to answer twice).
   const story = storyMatch(rules, event)
   if (story) {
+    await recordEvent(db, user.id, senderId, "story", { automationId: story.id })
     if (optedOut) return
     console.log(`[webhook] Story match: "${story.name}"`)
     const content = parseContent(story.response_content)
+    await addTags(db, user.id, senderId, content.add_tags)
     if (content.check_follow === true) await runFollowGate(db, user, senderId, story, content, false)
-    else await sendRuleContent(db, user, senderId, content)
+    else await deliver(db, user, senderId, story, content)
     return
   }
   if (event.reaction || event.message?.reply_to?.story) return
@@ -581,6 +616,7 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
   const isUnlockEvent = triggerType === "postback" && triggerValue.startsWith(UNLOCK_PAYLOAD_PREFIX)
 
   const conv = await ensureConversation(db, user, senderId)
+  await setUsernameIfMissing(db, user.id, senderId, conv?.recipient_username)
   await saveMessage(
     db,
     user,
@@ -599,6 +635,7 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
     const command = optCommand(triggerValue)
     if (command) {
       await setOptOut(db, user.id, senderId, command === "out")
+      await recordEvent(db, user.id, senderId, command === "out" ? "opt_out" : "opt_in")
       const text = command === "out" ? OPT_OUT_CONFIRMATION : OPT_IN_CONFIRMATION
       const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, text))
       await reply(result.ok ? text : null)
@@ -631,6 +668,11 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
     match = rules.find((a) => (a.trigger_source === "dm" || !a.trigger_source) && a.trigger_type === "keyword" && keywordMatches(a.trigger_value, triggerValue))
   }
 
+  await recordEvent(db, user.id, senderId, isOptInEvent ? "optin_tap" : isUnlockEvent ? "unlock_tap" : "dm", {
+    automationId: match?.id,
+    keyword: match && triggerType === "keyword" ? matchedKeyword(match.trigger_value || "", triggerValue) : null,
+  })
+
   if (!match) {
     if (triggerType === "keyword" && user.groq_auto_reply_enabled) await aiFallback(db, user, senderId, triggerValue, conv)
     return
@@ -638,13 +680,14 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
 
   console.log(`[webhook] DM match: "${match.name}"`)
   const content = parseContent(match.response_content)
+  await addTags(db, user.id, senderId, content.add_tags)
   if (content.mark_seen !== false) await sendSenderAction(user.access_token, senderId, "mark_seen")
 
   // Postbacks, messages and story replies are DM interactions, so the follow check is valid here.
   const preview =
     content.check_follow === true
       ? await runFollowGate(db, user, senderId, match, content, isUnlockEvent)
-      : await sendRuleContent(db, user, senderId, content)
+      : await deliver(db, user, senderId, match, content)
   await reply(preview)
 }
 
