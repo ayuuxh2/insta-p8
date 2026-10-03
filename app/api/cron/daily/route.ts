@@ -65,6 +65,13 @@ export async function GET(request: NextRequest) {
     .lt("updated_at", new Date(Date.now() - 86_400_000).toISOString())
   if (purgeError) console.error("[cron] unlock_attempts purge failed:", purgeError.message)
 
+  // Anti-spam bookkeeping: Meta retries within hours, the hourly limit needs one hour.
+  const days = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+  for (const [table, olderThan] of [["processed_events", days(30)], ["send_log", days(7)]] as const) {
+    const { error: e } = await supabase.from(table).delete().lt("created_at", olderThan)
+    if (e) console.error(`[cron] ${table} purge failed:`, e.message)
+  }
+
   console.log("[cron] daily:", JSON.stringify(results))
   return NextResponse.json({ ok: true, results })
 }

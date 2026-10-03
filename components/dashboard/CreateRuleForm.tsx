@@ -65,6 +65,9 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   const [optinTitle, setOptinTitle] = useState("")
   const [optinSubtitle, setOptinSubtitle] = useState("")
   const [optinButton, setOptinButton] = useState("")
+  // Comment rules send the "Quero receber" card first unless this is on (single message, no button).
+  const [directSend, setDirectSend] = useState(false)
+  const [messageVariants, setMessageVariants] = useState<string[]>([])
   const [delaySeconds, setDelaySeconds] = useState(0)
   const [typingIndicator, setTypingIndicator] = useState(false)
 
@@ -121,6 +124,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     setOptinTitle(content.optin_title || "")
     setOptinSubtitle(content.optin_subtitle || "")
     setOptinButton(content.optin_button || "")
+    setDirectSend(content.direct_send === true)
+    setMessageVariants(Array.isArray(content.message_variants) ? content.message_variants : [])
     setDelaySeconds(Number(content.delay_seconds) || 0)
     setTypingIndicator(content.typing_indicator === true)
     
@@ -211,7 +216,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
       content.reply_mode = replyMode
       if (publicReplies.length > 0) content.public_replies = publicReplies
       if (includeReplies) content.include_replies = true
-      if (checkFollow) {
+      if (directSend && !checkFollow) content.direct_send = true
+      if (checkFollow || !directSend) {
         if (optinTitle.trim()) content.optin_title = optinTitle.trim()
         if (optinSubtitle.trim()) content.optin_subtitle = optinSubtitle.trim()
         if (optinButton.trim()) content.optin_button = optinButton.trim()
@@ -223,6 +229,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
     if (type === "text") {
       content.message = messageText
+      const variants = messageVariants.map((v) => v.trim()).filter(Boolean)
+      if (variants.length) content.message_variants = variants
     } else if (type === "media") {
       content.media = { type: mediaType, url: mediaUrl.trim() }
       if (messageText.trim()) content.message = messageText
@@ -537,7 +545,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                 <div className="space-y-2 bg-muted/40 p-5 rounded-2xl border border-border">
                   <FieldLabel>Resposta pública no comentário</FieldLabel>
                   <p className="text-[11px] text-muted-foreground mb-3">Adicione várias frases. A gente alterna entre elas para parecer mais natural.</p>
-                  <TagInput value={publicReplies} onChange={setPublicReplies} placeholder={'ex.: "Te mandei na DM!", "Confere sua DM 😉"'} />
+                  <TagInput sentences value={publicReplies} onChange={setPublicReplies} placeholder={'digite uma frase e aperte Enter (ex.: Te mandei na DM!)'} />
                 </div>
               )}
 
@@ -578,6 +586,14 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                         placeholder="Ex.: Oi! Aqui está o link com 10% de desconto pra você: ..."
                       />
                       <p className="font-mono-ui text-[10px] text-muted-foreground text-right">{messageText.length}/1000</p>
+                      <div className="space-y-2 pt-1">
+                        <FieldLabel>Variações da mensagem (opcional)</FieldLabel>
+                        <p className="text-[11px] text-muted-foreground">
+                          A cada envio sorteamos uma entre a mensagem principal e estas variações. Mensagens idênticas em massa
+                          podem ser vistas como spam pelo Instagram.
+                        </p>
+                        <TagInput sentences value={messageVariants} onChange={setMessageVariants} placeholder="escreva outra versão e aperte Enter" />
+                      </div>
                     </div>
                   )}
 
@@ -703,11 +719,22 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
               <div className="space-y-4">
                 <FieldLabel>Opções de envio</FieldLabel>
                 <ToggleRow icon={<Lock className="w-5 h-5" />} title="Liberar só para seguidores" sub="Só seguidores recebem a mensagem. Quem ainda não segue recebe antes um pedido para seguir." on={checkFollow} onToggle={() => setCheckFollow(!checkFollow)} />
-                {checkFollow && triggerSource === "comment" && (
+                {triggerSource === "comment" && !checkFollow && (
+                  <ToggleRow
+                    icon={<Send className="w-5 h-5" />}
+                    title="Enviar direto, sem botão"
+                    sub='Pula o cartão "Quero receber" e manda só UMA mensagem (texto, cartão ou mídia). Sem o toque, a conversa não fica aberta para outras mensagens.'
+                    on={directSend}
+                    onToggle={() => setDirectSend(!directSend)}
+                  />
+                )}
+                {triggerSource === "comment" && (checkFollow || !directSend) && (
                   <div className="space-y-3 rounded-2xl border border-border p-4">
                     <p className="text-[11px] text-muted-foreground">
-                      Quem comentar recebe primeiro um cartão com o botão abaixo. Ao tocar, verificamos se a pessoa segue a
-                      conta: se seguir, recebe a sua mensagem; se não, recebe o pedido para seguir e o botão &quot;Já segui ✅&quot;.
+                      Quem comentar recebe primeiro um cartão com o botão abaixo. Ao tocar, a conversa é aberta e{" "}
+                      {checkFollow
+                        ? 'verificamos se a pessoa segue a conta: se seguir, recebe a sua mensagem; se não, recebe o pedido para seguir e o botão "Já segui ✅".'
+                        : "a pessoa recebe a sua mensagem."}{" "}
                       Deixe em branco para usar o texto padrão.
                     </p>
                     <div className="space-y-1.5">
@@ -732,8 +759,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                       <Timer className="w-4.5 h-4.5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Atraso antes de responder</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Espera alguns segundos antes de enviar, como uma pessoa faria.</p>
+                      <p className="text-sm font-semibold text-foreground">Atraso extra antes de responder</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Toda resposta já espera alguns segundos aleatórios, como uma pessoa faria. Aqui você soma mais tempo.</p>
                     </div>
                   </div>
                   <select
@@ -741,7 +768,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                     onChange={(e) => setDelaySeconds(Number(e.target.value))}
                     className="bg-black border border-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none hover:border-border transition-all cursor-pointer"
                   >
-                    <option value={0}>Enviar na hora</option>
+                    <option value={0}>Sem atraso extra</option>
                     <option value={3}>3 segundos</option>
                     <option value={5}>5 segundos</option>
                     <option value={10}>10 segundos</option>
@@ -749,6 +776,13 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                   </select>
                 </div>
               </div>
+
+              {triggerSource === "comment" && triggers.length === 0 && (
+                <div role="alert" className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-xs text-foreground">
+                  <strong>Atenção: sem palavra-chave.</strong> Esta regra vai responder a <strong>todos os comentários</strong>{" "}
+                  {selectedReel ? "deste post" : "de todos os seus posts"}. Para responder só a uma palavra, volte à etapa 1.
+                </div>
+              )}
 
               {/* Plain-text Summary Panel */}
               <div className="rounded-2xl border border-accent-yellow/15 bg-accent-yellow/[0.03] p-5 space-y-2">

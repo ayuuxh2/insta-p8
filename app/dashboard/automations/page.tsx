@@ -18,6 +18,8 @@ export default function AutomationsPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  // Full editor for a new rule (post selection, follow gate, card, variations...).
+  const [creating, setCreating] = useState<Automation["trigger_source"] | null>(null)
   const refresh = useCallback(async () => {
     if (!userId) return
     try {
@@ -57,10 +59,17 @@ export default function AutomationsPage() {
       <div><h1 className="text-2xl font-semibold tracking-tight">Respostas automáticas</h1><p className="mt-1.5 text-sm text-muted-foreground">Chegou a palavra-chave, sai a sua resposta.</p></div>
       <span className="pt-1 text-xs text-muted-foreground">{(n => `${n} ${n === 1 ? "ativa" : "ativas"}`)(rules.filter(rule => rule.is_active).length)}</span>
     </header>
-    {edit ? <section>
-      <button className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => setEdit(null)}><ArrowLeft className="size-4" />Voltar para respostas automáticas</button>
-      <CreateRuleForm key={edit.id} userId={userId} triggerSource={edit.trigger_source} editRule={edit} onSuccess={() => { setEdit(null); void refresh() }} />
+    {edit || creating ? <section>
+      <button className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setEdit(null); setCreating(null) }}><ArrowLeft className="size-4" />Voltar para respostas automáticas</button>
+      <CreateRuleForm key={edit?.id || `new-${creating}`} userId={userId} triggerSource={edit?.trigger_source || creating!} editRule={edit} onSuccess={() => { setEdit(null); setCreating(null); void refresh() }} />
     </section> : <>
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+        <span className="mr-auto text-muted-foreground">Editor completo (post específico, só para seguidores, cartão, variações):</span>
+        <button onClick={() => setCreating("comment")} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Nova regra de comentário</button>
+        <button onClick={() => setCreating("dm")} className="rounded-md border border-border px-3 py-1.5 text-xs">Nova regra de DM</button>
+        <button onClick={() => setCreating("story")} className="rounded-md border border-border px-3 py-1.5 text-xs">Nova regra de Story</button>
+      </div>
+      <p className="mb-2 text-xs text-muted-foreground">Ou crie rápido:</p>
       <QuickAutomationForm userId={userId} initialSource="dm" onSuccess={() => { setSaved(true); void refresh() }} />
       {saved && <p role="status" className="mt-3 text-xs text-muted-foreground">Salva e ativa. Você pode adicionar outra resposta acima.</p>}
       <section className="mt-10">
