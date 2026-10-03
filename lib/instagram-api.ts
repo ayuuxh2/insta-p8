@@ -25,12 +25,24 @@ export interface SendResult {
   error?: any
 }
 
+// The token goes in the Authorization header, never in the URL (URLs end up in logs).
+export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` })
+
+/** Short human-readable description of a Graph API error, for the event log. */
+export function describeGraphError(error: any): string {
+  if (!error) return "erro desconhecido"
+  if (typeof error === "string") return error
+  if (error.name === "TimeoutError" || error.name === "AbortError") return "o Instagram demorou para responder"
+  const code = error.code ? `código ${error.code}${error.error_subcode ? `/${error.error_subcode}` : ""}` : ""
+  return [error.message || error.type, code].filter(Boolean).join(" · ").slice(0, 300)
+}
+
 async function post(path: string, token: string, body: any): Promise<SendResult> {
   try {
-    const res = await fetch(`${GRAPH}/${path}?access_token=${encodeURIComponent(token)}`, {
+    const res = await fetch(`${GRAPH}/${path}`, {
       method: "POST",
       signal: AbortSignal.timeout(15000),
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader(token) },
       body: JSON.stringify(body),
     })
     const json = await res.json()
@@ -97,7 +109,7 @@ export function buildOptInCard(params: {
 export async function checkFollowsBusiness(token: string, igScopedId: string): Promise<boolean | null> {
   try {
     const res = await fetch(`${GRAPH}/${igScopedId}?fields=is_user_follow_business`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: authHeader(token),
       signal: AbortSignal.timeout(5000),
     })
     const json = await res.json()
@@ -199,7 +211,7 @@ export async function replyToComment(token: string, commentId: string, message: 
 
 export async function fetchProfile(token: string, igUserId: string): Promise<{ username?: string; name?: string } | null> {
   try {
-    const res = await fetch(`${GRAPH}/${igUserId}?fields=username,name&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000) })
+    const res = await fetch(`${GRAPH}/${igUserId}?fields=username,name`, { headers: authHeader(token), signal: AbortSignal.timeout(5000) })
     const json = await res.json()
     if (!res.ok || json.error) return null
     return json
@@ -210,7 +222,7 @@ export async function fetchProfile(token: string, igUserId: string): Promise<{ u
 
 export async function verifyIdOwnership(token: string, id: string): Promise<boolean> {
   try {
-    const res = await fetch(`${GRAPH}/${id}?fields=id&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000) })
+    const res = await fetch(`${GRAPH}/${id}?fields=id`, { headers: authHeader(token), signal: AbortSignal.timeout(5000) })
     return res.ok
   } catch {
     return false

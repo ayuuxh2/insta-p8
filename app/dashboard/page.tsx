@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, Bot, CheckCircle2, Loader2, MessageSquare, Plus, Users, Workflow } from "lucide-react"
+import { Activity, ArrowRight, Bot, CheckCircle2, Loader2, MousePointerClick, Plus, Send, Users } from "lucide-react"
 import { useInstagramSession } from "@/hooks/use-instagram-session"
+import { EVENT_LABELS } from "@/lib/contacts-query"
 
 interface DashboardStats {
-  metrics: { totalAutomations: number; activeTriggers: number; audienceReached: number; messagesSent: number }
-  recentActivity: Array<{ id: string; content: string; created_at: string; recipient?: { recipient_username: string } }>
+  metrics: { activeTriggers: number; contacts: number; delivered30d: number; clicks30d: number }
+  recentActivity: Array<{ id: number; event: string; created_at: string; username: string | null; rule: string | null }>
+}
+
+const when = (iso: string) => {
+  const d = new Date(iso)
+  const today = new Date().toDateString() === d.toDateString()
+  return today
+    ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
 }
 
 export default function DashboardPage() {
@@ -35,22 +44,31 @@ export default function DashboardPage() {
       </header>
 
       <section className="grid border-b border-border sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumo da conta">
-        <Metric label="Automações" value={metrics?.totalAutomations ?? 0} icon={Workflow} />
-        <Metric label="Gatilhos ativos" value={metrics?.activeTriggers ?? 0} icon={CheckCircle2} />
-        <Metric label="Mensagens enviadas" value={metrics?.messagesSent ?? 0} icon={MessageSquare} />
-        <Metric label="Pessoas alcançadas" value={metrics?.audienceReached ?? 0} icon={Users} />
+        <Metric label="Respostas automáticas ativas" value={metrics?.activeTriggers ?? 0} icon={CheckCircle2} />
+        <Metric label="Contatos" value={metrics?.contacts ?? 0} icon={Users} />
+        <Metric label="Conteúdos entregues (30 dias)" value={metrics?.delivered30d ?? 0} icon={Send} />
+        <Metric label="Cliques em links (30 dias)" value={metrics?.clicks30d ?? 0} icon={MousePointerClick} />
       </section>
 
       <div className="grid gap-6 py-7 lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.8fr)]">
         <section className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 className="text-sm font-semibold">Conversas recentes</h2><p className="mt-1 text-xs text-muted-foreground">Últimas respostas enviadas pelas suas automações</p></div><Link href="/dashboard/inbox" className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Ver todas<ArrowRight className="size-3.5" /></Link></div>
+          <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><h2 className="text-sm font-semibold">Atividade recente</h2><p className="mt-1 text-xs text-muted-foreground">Quem interagiu com as suas automações</p></div><Link href="/dashboard/contacts" className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">Ver contatos<ArrowRight className="size-3.5" /></Link></div>
           <div className="divide-y divide-border">
-            {stats?.recentActivity?.length ? stats.recentActivity.slice(0, 6).map(message => <div key={message.id} className="flex items-center gap-3 px-5 py-4"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary"><MessageSquare className="size-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">@{message.recipient?.recipient_username || "instagram_user"}</p><p className="mt-1 truncate text-xs text-muted-foreground">{message.content}</p></div><time className="text-xs text-muted-foreground">{new Date(message.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time></div>) : <EmptyState icon={MessageSquare} title="Nenhuma conversa ainda" description="As novas respostas automáticas vão aparecer aqui." />}
+            {stats?.recentActivity?.length ? stats.recentActivity.map(item => (
+              <div key={item.id} className="flex items-center gap-3 px-5 py-3.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary"><Activity className="size-4" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.username ? `@${item.username}` : "Alguém"} <span className="font-normal text-muted-foreground">· {(EVENT_LABELS[item.event] || item.event).toLowerCase()}</span></p>
+                  {item.rule && <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.rule}</p>}
+                </div>
+                <time className="text-xs tabular-nums text-muted-foreground">{when(item.created_at)}</time>
+              </div>
+            )) : <EmptyState icon={Activity} title="Nenhuma atividade ainda" description="Quando alguém comentar ou mandar DM com uma palavra-chave, aparece aqui." />}
           </div>
         </section>
 
         <aside className="space-y-6">
-          <section className="rounded-xl border border-border bg-card p-5"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-secondary"><Bot className="size-4" /></span><div><h2 className="text-sm font-semibold">Status das automações</h2><p className="mt-0.5 text-xs text-muted-foreground">Sua conta está conectada</p></div></div><dl className="mt-5 space-y-3 border-t border-border pt-4 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Instagram</dt><dd className="flex items-center gap-1.5 font-medium"><span className="size-1.5 rounded-full bg-foreground" />Conectado</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Automações ativas</dt><dd className="font-medium">{metrics?.activeTriggers ?? 0}</dd></div></dl></section>
+          <section className="rounded-xl border border-border bg-card p-5"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-secondary"><Bot className="size-4" /></span><div><h2 className="text-sm font-semibold">Status das automações</h2><p className="mt-0.5 text-xs text-muted-foreground">Se a conexão cair, um aviso aparece no topo</p></div></div><dl className="mt-5 space-y-3 border-t border-border pt-4 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Instagram</dt><dd className="flex items-center gap-1.5 font-medium"><span className="size-1.5 rounded-full bg-foreground" />Conectado</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Automações ativas</dt><dd className="font-medium">{metrics?.activeTriggers ?? 0}</dd></div></dl><Link href="/dashboard/settings" className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">Ver diagnóstico<ArrowRight className="size-3.5" /></Link></section>
           <section className="rounded-xl bg-primary p-5 text-primary-foreground"><h2 className="text-sm font-semibold">Crie sua próxima automação</h2><p className="mt-2 text-xs leading-5 text-primary-foreground/75">Transforme um comentário, uma DM ou uma resposta ao Story em uma resposta automática.</p><Link href="/dashboard/automations" className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold">Criar automação<ArrowRight className="size-3.5" /></Link></section>
         </aside>
       </div>

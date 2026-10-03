@@ -66,6 +66,68 @@ export default function SettingsPage() {
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                 {saved ? "Salvo" : "Salvar informações do negócio"}
             </button>
+            {userId && <Diagnostics userId={userId} />}
         </div>
+    )
+}
+
+interface LogEvent {
+    id: string
+    event_type: string
+    processed_at: string
+    data: { de?: string; texto?: string; resultado?: string } | null
+}
+
+// Last received comments/messages and what the bot did with each (kept for 14 days).
+function Diagnostics({ userId }: { userId: string }) {
+    const [events, setEvents] = useState<LogEvent[] | null>(null)
+    const [error, setError] = useState("")
+
+    const load = () => {
+        setEvents(null)
+        fetch(`/api/webhook-log?userId=${userId}`)
+            .then((res) => res.json())
+            .then((json) => { if (json.error) throw new Error(json.error); setEvents(json.events) })
+            .catch(() => { setError("Não foi possível carregar o registro."); setEvents([]) })
+    }
+    useEffect(load, [userId])
+
+    const failed = (e: LogEvent) => /falha|erro/i.test(e.data?.resultado || "")
+
+    return (
+        <section className="mt-12 border-t border-border pt-7">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h2 className="text-lg font-semibold">Diagnóstico</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Últimos comentários e mensagens que chegaram e o que a automação fez com cada um (guardado por 14 dias).
+                    </p>
+                </div>
+                <button onClick={load} className="rounded-md border border-border px-3 py-1.5 text-xs">Atualizar</button>
+            </div>
+            {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+            {events === null ? <Loader2 className="mt-4 size-5 animate-spin text-muted-foreground" /> : events.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">Nada recebido ainda. Comente num post com uma palavra-chave para testar.</p>
+            ) : (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+                    <table className="w-full min-w-[640px] text-left text-xs">
+                        <thead className="border-b border-border bg-card text-muted-foreground">
+                            <tr><th className="px-3 py-2 font-medium">Quando</th><th className="px-3 py-2 font-medium">Tipo</th><th className="px-3 py-2 font-medium">De</th><th className="px-3 py-2 font-medium">Texto</th><th className="px-3 py-2 font-medium">Resultado</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                            {events.map((e) => (
+                                <tr key={e.id} className={failed(e) ? "bg-destructive/5" : undefined}>
+                                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">{new Date(e.processed_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</td>
+                                    <td className="px-3 py-2">{e.event_type}</td>
+                                    <td className="px-3 py-2">{e.data?.de || "—"}</td>
+                                    <td className="max-w-48 truncate px-3 py-2" title={e.data?.texto}>{e.data?.texto || "—"}</td>
+                                    <td className={`px-3 py-2 ${failed(e) ? "text-destructive" : ""}`}>{e.data?.resultado || "—"}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </section>
     )
 }

@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
 
     try {
       const meRes = await fetch(
-        `https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`
+        "https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url",
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       )
       const meData = await meRes.json()
 

@@ -182,7 +182,7 @@ export default function ContactsPage() {
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums">{contact.interactions}</td>
               </tr>
-              {open === contact.ig_id && <tr><td colSpan={6} className="bg-card/50 px-6 py-4"><ContactDetails userId={userId} contact={contact} onTags={tags => void saveTags(contact, tags)} /></td></tr>}
+              {open === contact.ig_id && <tr><td colSpan={6} className="bg-card/50 px-6 py-4"><ContactDetails userId={userId} contact={contact} onTags={tags => void saveTags(contact, tags)} onDeleted={() => { setOpen(null); void load() }} /></td></tr>}
             </Fragment>
           )) : (
             <tr><td colSpan={6} className="px-3 py-8 text-sm text-muted-foreground">
@@ -205,8 +205,17 @@ export default function ContactsPage() {
   </div>
 }
 
-function ContactDetails({ userId, contact, onTags }: { userId: string; contact: Contact; onTags: (tags: string[]) => void }) {
+function ContactDetails({ userId, contact, onTags, onDeleted }: { userId: string; contact: Contact; onTags: (tags: string[]) => void; onDeleted: () => void }) {
   const [events, setEvents] = useState<Array<{ event: string; keyword: string | null; created_at: string; rule: string | null }> | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function erase() {
+    setDeleting(true)
+    const res = await fetch(`/api/contacts?userId=${userId}&igId=${contact.ig_id}`, { method: "DELETE" })
+    setDeleting(false)
+    if (res.ok) onDeleted()
+  }
 
   useEffect(() => {
     fetch(`/api/contacts/events?userId=${userId}&igId=${contact.ig_id}`)
@@ -222,6 +231,17 @@ function ContactDetails({ userId, contact, onTags }: { userId: string; contact: 
       <p className="text-[11px] text-muted-foreground">
         Primeiro contato em {formatDate(contact.first_seen_at)}. Use tags para separar interessados, clientes, campanhas…
       </p>
+      <div className="pt-3">
+        {confirmDelete ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span>Apagar contato, histórico, links e conversas registradas? Não dá para desfazer.</span>
+            <button disabled={deleting} onClick={() => void erase()} className="rounded-md bg-destructive px-3 py-1.5 text-white disabled:opacity-60">{deleting ? "Excluindo…" : "Excluir dados"}</button>
+            <button onClick={() => setConfirmDelete(false)} className="rounded-md border border-border px-3 py-1.5">Cancelar</button>
+          </div>
+        ) : (
+          <button onClick={() => setConfirmDelete(true)} className="text-xs text-destructive hover:underline">Excluir dados desta pessoa (LGPD)</button>
+        )}
+      </div>
     </div>
     <div className="space-y-2">
       <p className="text-xs font-medium">Histórico</p>

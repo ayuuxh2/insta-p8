@@ -81,10 +81,10 @@ export async function POST(request: NextRequest) {
             // We need to know which response to send. 
 
             const response = await fetch(
-                `https://graph.instagram.com/v21.0/me/messenger_profile?access_token=${user.access_token}`,
+                "https://graph.instagram.com/v24.0/me/messenger_profile",
                 {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.access_token}` },
                     body: JSON.stringify({
                         ice_breakers: ice_breakers,
                         platform: "instagram" // Important

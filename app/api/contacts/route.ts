@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { applyContactFilters, filtersFromSearchParams } from "@/lib/contacts-query"
-import { normalizeTags } from "@/lib/contacts"
+import { normalizeTags, deleteContactData } from "@/lib/contacts"
 
 const PAGE_SIZE = 50
 
@@ -56,4 +56,15 @@ export async function PATCH(request: NextRequest) {
   const { error } = await db.from("contacts").update({ tags: clean }).eq("user_id", userId).eq("ig_id", igId)
   if (error) return NextResponse.json({ error: "Não foi possível salvar as tags" }, { status: 500 })
   return NextResponse.json({ ok: true, tags: clean })
+}
+
+// DELETE /api/contacts?userId=&igId= — LGPD erasure of one person (contact, history, links, inbox).
+export async function DELETE(request: NextRequest) {
+  const userId = request.nextUrl.searchParams.get("userId")
+  const igId = request.nextUrl.searchParams.get("igId")
+  if (!userId || !igId) return NextResponse.json({ error: "Dados ausentes" }, { status: 400 })
+
+  const db = await getSupabaseServerClient()
+  await deleteContactData(db, userId, igId)
+  return NextResponse.json({ ok: true })
 }

@@ -14,6 +14,7 @@ import {
   checkFollowsBusiness,
   OPTIN_PAYLOAD_PREFIX,
   UNLOCK_PAYLOAD_PREFIX,
+  describeGraphError,
   type SendResult,
 } from "@/lib/instagram-api"
 import { generateAIReply } from "@/lib/ai-reply"
@@ -32,7 +33,7 @@ import {
   OPT_OUT_CONFIRMATION,
   OPT_IN_CONFIRMATION,
 } from "@/lib/antispam"
-import { recordEvent, setFollows, addTags, setUsernameIfMissing } from "@/lib/contacts"
+import { recordEvent, setFollows, addTags, setUsernameIfMissing, deleteContactData, isDeleteRequest, DELETE_CONFIRMATION } from "@/lib/contacts"
 import { trackUrlsInText, withFileLink, trackCard } from "@/lib/links"
 
 // Work continues after the 200 response (see after()); give it room for human-like delays.
@@ -172,11 +173,29 @@ function responsePreviewText(content: any, message?: string): string {
   return "[automação]"
 }
 
-/** Wraps a send so successful ones are counted for the hourly limits. */
+/**
+ * Wraps a send so successful ones are counted for the hourly limits. The last failure is kept
+ * on the per-entry user object so the event log can show what Instagram answered.
+ */
 async function tracked(db: Db, user: any, recipient: Recipient, send: Promise<SendResult>): Promise<SendResult> {
   const result = await send
   if (result?.ok) await logSend(db, user.id, recipient.comment_id ? "private_reply" : "dm")
+  else user.lastSendError = describeGraphError(result?.error)
   return result
+}
+
+/** Outcome for the event log, including Instagram's error when a send failed. */
+function sendOutcome(user: any, ok: boolean, success: string): string {
+  if (ok) return success
+  const error = user.lastSendError
+  user.lastSendError = undefined
+  return `falha no envio${error ? `: ${error}` : ""}`
+}
+
+/** One row per received comment/message in webhook_events (Preferências → Diagnóstico). */
+async function logWebhook(db: Db, userId: number | string, type: string, data: Record<string, unknown>) {
+  const { error } = await db.from("webhook_events").insert({ event_type: type, user_id: userId, data })
+  if (error) console.error("[webhook] event log failed:", error.message)
 }
 
 /**
@@ -264,13 +283,15 @@ async function sendPrivateReply(db: Db, user: any, rule: any, content: any, comm
   )
 }
 
-async function sendPublicReply(db: Db, user: any, content: any, commentId: string) {
+async function sendPublicReply(db: Db, user: any, content: any, commentId: string): Promise<boolean> {
   const pool: string[] =
     Array.isArray(content.public_replies) && content.public_replies.filter(Boolean).length > 0
       ? content.public_replies.filter(Boolean)
       : DEFAULT_PUBLIC_REPLIES
   const result = await replyToComment(user.access_token, commentId, pickRandom(pool))
   if (result.ok) await logSend(db, user.id, "public_reply")
+  else user.lastSendError = describeGraphError(result.error)
+  return result.ok
 }
 
 // ============================================================
@@ -439,24 +460,63 @@ async function processWebhook(body: any) {
     await drainPendingReplies(db, user, rules)
 
     for (const change of entry.changes || []) {
-      if (change.field === "comments" && change.value?.text) await handleComment(db, user, rules, change.value, ownIds)
+      if (change.field !== "comments" || !change.value?.text) continue
+      const value = change.value
+      let outcome: string
+      user.lastSendError = undefined
+      try {
+        outcome = await handleComment(db, user, rules, value, ownIds)
+      } catch (e: any) {
+        console.error("[webhook] comment error", e)
+        outcome = `erro interno: ${e?.message || e}`
+      }
+      if (outcome !== "própria conta") {
+        await logWebhook(db, user.id, "comentário", {
+          ig: String(value.from?.id || ""),
+          de: value.from?.username ? `@${value.from.username}` : value.from?.id,
+          texto: String(value.text).slice(0, 80),
+          resultado: outcome,
+        })
+      }
     }
 
     for (const event of entry.messaging || []) {
       if (event.read || event.delivery || event.message?.is_echo) continue
       const senderId = String(event.sender?.id || "")
       if (!senderId || ownIds.has(senderId)) continue
-      await handleMessagingEvent(db, user, rules, event, senderId)
+      let outcome: string
+      user.lastSendError = undefined
+      try {
+        outcome = await handleMessagingEvent(db, user, rules, event, senderId)
+      } catch (e: any) {
+        console.error("[webhook] messaging error", e)
+        outcome = `erro interno: ${e?.message || e}`
+      }
+      // An erasure request is logged without anything that identifies the person.
+      const erased = !!event.message?.text && isDeleteRequest(event.message.text)
+      await logWebhook(db, user.id, messagingType(event), {
+        ig: erased ? null : senderId,
+        de: erased ? "(dados excluídos)" : senderId,
+        texto: erased ? "EXCLUIR MEUS DADOS" : String(event.message?.text || event.postback?.title || event.reaction?.emoji || "").slice(0, 80),
+        resultado: outcome,
+      })
     }
   }
 }
 
+function messagingType(event: any): string {
+  if (event.postback || event.message?.quick_reply) return "botão"
+  if (event.reaction) return "reação"
+  if (event.message?.reply_to?.story || event.message?.attachments?.[0]?.type === "story_mention") return "story"
+  return "DM"
+}
+
 // ---------- Comments ----------
 
-async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds: Set<string>) {
+async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds: Set<string>): Promise<string> {
   const commentId = String(value.id)
   const senderId = String(value.from?.id || "")
-  if (!senderId || ownIds.has(senderId)) return
+  if (!senderId || ownIds.has(senderId)) return "própria conta"
 
   const commentText = String(value.text).toLowerCase().trim()
   const mediaId = value.media?.id
@@ -467,13 +527,13 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
     commentRules.find((a) => a.specific_media_id === mediaId && a.trigger_type === "reply_all") ||
     commentRules.find((a) => a.specific_media_id === mediaId && a.trigger_type === "keyword" && keywordMatches(a.trigger_value, commentText)) ||
     commentRules.find((a) => !a.specific_media_id && a.trigger_type === "keyword" && keywordMatches(a.trigger_value, commentText))
-  if (!match) return
+  if (!match) return "nenhuma regra correspondente"
 
   const content = parseContent(match.response_content)
-  if (value.parent_id && content.include_replies !== true) return
+  if (value.parent_id && content.include_replies !== true) return `resposta a comentário ignorada ("${match.name}")`
   if (!(await claimEvent(db, `comment:${commentId}`))) {
     console.log(`[webhook] Comment ${commentId} already handled — skipping`)
-    return
+    return "duplicado (já respondido)"
   }
   console.log(`[webhook] Comment match: "${match.name}"`)
 
@@ -486,11 +546,12 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
   await addTags(db, user.id, senderId, content.add_tags)
   const replyMode = content.reply_mode || "both"
 
-  if (replyMode !== "dm_only") await sendPublicReply(db, user, content, commentId)
-  if (replyMode === "public_only") return
+  const publicOk = replyMode !== "dm_only" ? await sendPublicReply(db, user, content, commentId) : true
+  const publicNote = publicOk ? "" : " · resposta pública falhou"
+  if (replyMode === "public_only") return sendOutcome(user, publicOk, `"${match.name}": só resposta pública`)
   if (optedOut) {
     console.log(`[webhook] ${senderId} opted out — no private reply`)
-    return
+    return `"${match.name}": pessoa saiu da lista, DM não enviada${publicNote}`
   }
 
   if ((await countSendsLastHour(db, user.id, "private_reply")) >= PRIVATE_REPLY_HOURLY_LIMIT) {
@@ -502,9 +563,11 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
       sender_id: senderId,
       comment_created_at: value.timestamp ? new Date(Number(value.timestamp) * 1000).toISOString() : new Date().toISOString(),
     })
-    return
+    return `"${match.name}": na fila (limite por hora atingido)${publicNote}`
   }
-  await privateReplyAndRecord(db, user, match, content, commentId, senderId)
+  const result = await privateReplyAndRecord(db, user, match, content, commentId, senderId)
+  const direct = content.direct_send === true && content.check_follow !== true
+  return sendOutcome(user, result.ok, `"${match.name}": ${direct ? "conteúdo enviado na DM" : 'cartão "Quero receber" enviado'}${publicNote}`)
 }
 
 async function privateReplyAndRecord(db: Db, user: any, rule: any, content: any, commentId: string, senderId: string): Promise<SendResult> {
@@ -583,12 +646,19 @@ function storyMatch(rules: any[], event: any): any | null {
   return null
 }
 
-async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any, senderId: string) {
+async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any, senderId: string): Promise<string> {
   const mid: string | undefined = event.message?.mid || event.postback?.mid || event.reaction?.mid
   const eventKey = mid ? `msg:${mid}${event.reaction ? `:reaction:${event.reaction.action || ""}` : ""}` : null
   if (eventKey && !(await claimEvent(db, eventKey))) {
     console.log(`[webhook] Event ${eventKey} already handled — skipping`)
-    return
+    return "duplicado (já respondido)"
+  }
+
+  // "EXCLUIR MEUS DADOS" (LGPD): erase everything about this person, confirm, keep nothing.
+  if (event.message?.text && isDeleteRequest(event.message.text)) {
+    await deleteContactData(db, user.id, senderId)
+    const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, DELETE_CONFIRMATION))
+    return sendOutcome(user, result.ok, "pedido de exclusão de dados atendido")
   }
 
   const { optedOut } = await touchContact(db, user.id, senderId)
@@ -598,15 +668,15 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
   const story = storyMatch(rules, event)
   if (story) {
     await recordEvent(db, user.id, senderId, "story", { automationId: story.id })
-    if (optedOut) return
+    if (optedOut) return `"${story.name}": pessoa saiu da lista, sem resposta`
     console.log(`[webhook] Story match: "${story.name}"`)
     const content = parseContent(story.response_content)
     await addTags(db, user.id, senderId, content.add_tags)
-    if (content.check_follow === true) await runFollowGate(db, user, senderId, story, content, false)
-    else await deliver(db, user, senderId, story, content)
-    return
+    const preview =
+      content.check_follow === true ? await runFollowGate(db, user, senderId, story, content, false) : await deliver(db, user, senderId, story, content)
+    return sendOutcome(user, !!preview, `"${story.name}": ${preview}`)
   }
-  if (event.reaction || event.message?.reply_to?.story) return
+  if (event.reaction || event.message?.reply_to?.story) return "nenhuma regra de Story correspondente"
 
   let triggerType: "postback" | "keyword"
   let triggerValue: string
@@ -620,7 +690,7 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
     triggerType = "postback"
     triggerValue = event.postback.payload
   } else {
-    return
+    return "mensagem sem texto (foto, áudio…): ignorada"
   }
   console.log(`[webhook] DM from ${senderId}: "${triggerValue}"`)
 
@@ -651,10 +721,10 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
       const text = command === "out" ? OPT_OUT_CONFIRMATION : OPT_IN_CONFIRMATION
       const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, text))
       await reply(result.ok ? text : null)
-      return
+      return sendOutcome(user, result.ok, command === "out" ? "saiu da lista (SAIR)" : "voltou para a lista (VOLTAR)")
     }
     // People who opted out only get messages they explicitly ask for by tapping a button.
-    if (optedOut) return
+    if (optedOut) return "pessoa saiu da lista: sem resposta automática"
   }
 
   // ---------- Match automation ----------
@@ -686,8 +756,12 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
   })
 
   if (!match) {
-    if (triggerType === "keyword" && user.groq_auto_reply_enabled) await aiFallback(db, user, senderId, triggerValue, conv)
-    return
+    if (isOptInEvent || isUnlockEvent) return "botão de uma regra pausada ou excluída: sem resposta"
+    if (triggerType === "keyword" && user.groq_auto_reply_enabled) {
+      const ok = await aiFallback(db, user, senderId, triggerValue, conv)
+      return sendOutcome(user, ok, "sem regra: respondido pela IA")
+    }
+    return "nenhuma regra correspondente"
   }
 
   console.log(`[webhook] DM match: "${match.name}"`)
@@ -701,9 +775,10 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
       ? await runFollowGate(db, user, senderId, match, content, isUnlockEvent)
       : await deliver(db, user, senderId, match, content)
   await reply(preview)
+  return sendOutcome(user, !!preview, `"${match.name}": ${preview && preview.startsWith("[") ? preview : "conteúdo enviado"}`)
 }
 
-async function aiFallback(db: Db, user: any, senderId: string, text: string, conv: { id: string } | null) {
+async function aiFallback(db: Db, user: any, senderId: string, text: string, conv: { id: string } | null): Promise<boolean> {
   console.log(`[webhook] No rule match — trying AI auto-reply for DM from ${senderId}`)
   await sendSenderAction(user.access_token, senderId, "mark_seen")
   const { data: recentMessages } = conv
@@ -719,9 +794,13 @@ async function aiFallback(db: Db, user: any, senderId: string, text: string, con
     content: message.content,
   }))
   const aiReply = await generateAIReply(text, user.ai_context || "", history, user.groq_api_key, user.ai_base_url, user.ai_model)
-  if (!aiReply) return
+  if (!aiReply) {
+    user.lastSendError = "a IA não gerou resposta"
+    return false
+  }
   await sendSenderAction(user.access_token, senderId, "typing_on")
   await wait(humanDelayMs({}))
   const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, aiReply))
   if (result.ok) await saveMessage(db, user, conv, false, senderId, aiReply)
+  return result.ok
 }

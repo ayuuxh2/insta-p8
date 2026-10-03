@@ -66,6 +66,41 @@ export async function addTags(db: Db, userId: number | string, igId: string, tag
   if (error) console.error("[contacts] addTags failed:", error.message)
 }
 
+export const DELETE_CONFIRMATION =
+  "Pronto! Apagamos os seus dados da nossa ferramenta de respostas automáticas (contato, histórico e mensagens registradas). 🗑️"
+
+/** "excluir meus dados" / "apagar meus dados" (whole message, accents and case ignored). */
+export function isDeleteRequest(text: string): boolean {
+  const normalized = text.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[!.\s]+$/g, "").replace(/\s+/g, " ")
+  return ["excluir meus dados", "apagar meus dados", "deletar meus dados", "remover meus dados"].includes(normalized)
+}
+
+/**
+ * LGPD erasure: removes every record about one person (contact, history, links, inbox,
+ * queued replies, unlock counters). Instagram itself keeps the DM thread on its side.
+ */
+export async function deleteContactData(db: Db, userId: number | string, igId: string) {
+  const steps: Array<[string, () => Promise<{ error: any }>]> = [
+    ["contact_events", () => db.from("contact_events").delete().eq("user_id", userId).eq("ig_id", igId)],
+    ["tracked_links", () => db.from("tracked_links").delete().eq("user_id", userId).eq("ig_id", igId)],
+    ["pending_replies", () => db.from("pending_replies").delete().eq("user_id", userId).eq("sender_id", igId)],
+    ["unlock_attempts", () => db.from("unlock_attempts").delete().like("key", `${igId}::%`)],
+    ["contacts", () => db.from("contacts").delete().eq("user_id", userId).eq("ig_id", igId)],
+  ]
+  const { data: conv } = await db.from("conversations").select("id").eq("user_id", userId).eq("recipient_id", igId).maybeSingle()
+  if (conv) {
+    steps.push(["messages", () => db.from("messages").delete().eq("conversation_id", conv.id)])
+    steps.push(["conversations", () => db.from("conversations").delete().eq("id", conv.id)])
+  }
+  for (const [table, run] of steps) {
+    const { error } = await run()
+    if (error) console.error(`[contacts] delete ${table} failed:`, error.message)
+  }
+  // Webhook log rows carry the sender id in data.ig (data.de may be the @username).
+  await db.from("webhook_events").delete().eq("user_id", userId).eq("data->>ig", igId)
+  await db.from("webhook_events").delete().eq("user_id", userId).eq("data->>de", igId)
+}
+
 export async function setUsernameIfMissing(db: Db, userId: number | string, igId: string, username?: string | null) {
   if (!username || username.startsWith("cnt_")) return
   await db.from("contacts").update({ username }).eq("user_id", userId).eq("ig_id", igId).is("username", null)

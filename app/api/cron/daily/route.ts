@@ -67,8 +67,16 @@ export async function GET(request: NextRequest) {
 
   // Anti-spam bookkeeping: Meta retries within hours, the hourly limit needs one hour.
   const days = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
-  for (const [table, olderThan] of [["processed_events", days(30)], ["send_log", days(7)]] as const) {
-    const { error: e } = await supabase.from(table).delete().lt("created_at", olderThan)
+  // Retention (also stated in the privacy policy): event log 14 days, links 180 days, history 12 months.
+  const purges: Array<[string, string, string]> = [
+    ["processed_events", "created_at", days(30)],
+    ["send_log", "created_at", days(7)],
+    ["webhook_events", "processed_at", days(14)],
+    ["tracked_links", "created_at", days(180)],
+    ["contact_events", "created_at", days(365)],
+  ]
+  for (const [table, column, olderThan] of purges) {
+    const { error: e } = await supabase.from(table).delete().lt(column, olderThan)
     if (e) console.error(`[cron] ${table} purge failed:`, e.message)
   }
 
