@@ -33,6 +33,7 @@ import {
   OPT_IN_CONFIRMATION,
 } from "@/lib/antispam"
 import { recordEvent, setFollows, addTags, setUsernameIfMissing } from "@/lib/contacts"
+import { trackUrlsInText, withFileLink, trackCard } from "@/lib/links"
 
 // Work continues after the 200 response (see after()); give it room for human-like delays.
 export const maxDuration = 60
@@ -158,7 +159,7 @@ function keywordMatches(triggerValue: string, text: string): boolean {
 
 /** Sends the rule content and records "content_sent" for the contact. */
 async function deliver(db: Db, user: any, senderId: string, rule: any, content: any): Promise<string | null> {
-  const preview = await sendRuleContent(db, user, senderId, content)
+  const preview = await sendRuleContent(db, user, senderId, rule, content)
   if (preview) await recordEvent(db, user.id, senderId, "content_sent", { automationId: rule.id })
   return preview
 }
@@ -183,7 +184,14 @@ async function tracked(db: Db, user: any, recipient: Recipient, send: Promise<Se
  * followed by text. Waits a human-like random delay first, optionally showing "typing...".
  * Returns the inbox preview, or null if nothing was sent.
  */
-async function sendRuleContent(db: Db, user: any, recipientId: string, content: any): Promise<string | null> {
+/** Picks the message (or a variation), appends the file link and swaps URLs for tracked links. */
+async function buildMessage(db: Db, user: any, rule: any, recipientId: string, content: any): Promise<string> {
+  const ctx = { userId: user.id, automationId: rule?.id, igId: recipientId }
+  const text = await withFileLink(db, ctx, pickMessage(content), content.file)
+  return text ? trackUrlsInText(db, ctx, text) : ""
+}
+
+async function sendRuleContent(db: Db, user: any, recipientId: string, rule: any, content: any): Promise<string | null> {
   const token = user.access_token
   const recipient = { id: recipientId }
   const useTyping = content.typing_indicator === true
@@ -196,7 +204,7 @@ async function sendRuleContent(db: Db, user: any, recipientId: string, content: 
         .filter((q: any) => q?.title)
         .map((q: any) => ({ title: q.title, payload: q.payload || `QR_${q.title.toUpperCase().replace(/\s+/g, "_")}` }))
     : undefined
-  const message = pickMessage(content)
+  const message = await buildMessage(db, user, rule, recipientId, content)
 
   let result: SendResult
   if (content.media?.url) {
@@ -205,7 +213,8 @@ async function sendRuleContent(db: Db, user: any, recipientId: string, content: 
       result = await tracked(db, user, recipient, sendTextDM(token, recipient, message, quickReplies))
     }
   } else if (content.card) {
-    result = await tracked(db, user, recipient, sendCardDM(token, recipient, content.card))
+    const card = await trackCard(db, { userId: user.id, automationId: rule?.id, igId: recipientId }, content.card)
+    result = await tracked(db, user, recipient, sendCardDM(token, recipient, card))
   } else if (message) {
     result = await tracked(db, user, recipient, sendTextDM(token, recipient, message, quickReplies))
   } else {
@@ -222,14 +231,17 @@ async function sendRuleContent(db: Db, user: any, recipientId: string, content: 
  *    window; the rule content goes out after the tap, see handleMessagingEvent);
  *  - "direct_send": a single message (card, or text, or media — never two).
  */
-async function sendPrivateReply(db: Db, user: any, rule: any, content: any, commentId: string): Promise<SendResult> {
+async function sendPrivateReply(db: Db, user: any, rule: any, content: any, commentId: string, senderId: string): Promise<SendResult> {
   const token = user.access_token
   const recipient = { comment_id: commentId }
   await wait(humanDelayMs(content))
 
   if (content.direct_send === true && content.check_follow !== true) {
-    const message = pickMessage(content)
-    if (content.card) return tracked(db, user, recipient, sendCardDM(token, recipient, content.card))
+    const message = await buildMessage(db, user, rule, senderId, content)
+    if (content.card) {
+      const card = await trackCard(db, { userId: user.id, automationId: rule.id, igId: senderId }, content.card)
+      return tracked(db, user, recipient, sendCardDM(token, recipient, card))
+    }
     if (message) return tracked(db, user, recipient, sendTextDM(token, recipient, message))
     if (content.media?.url) return tracked(db, user, recipient, sendMediaDM(token, recipient, content.media.type || "image", content.media.url))
     return { ok: false, error: "empty content" }
@@ -496,7 +508,7 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
 }
 
 async function privateReplyAndRecord(db: Db, user: any, rule: any, content: any, commentId: string, senderId: string): Promise<SendResult> {
-  const result = await sendPrivateReply(db, user, rule, content, commentId)
+  const result = await sendPrivateReply(db, user, rule, content, commentId, senderId)
   if (result.ok) {
     const direct = content.direct_send === true && content.check_follow !== true
     await recordEvent(db, user.id, senderId, direct ? "content_sent" : "optin_sent", { automationId: rule.id })

@@ -9,6 +9,7 @@ import {
   Globe
 } from "lucide-react"
 import { TagInput } from "@/components/ui/tag-input"
+import { uploadFile, type UploadedFile } from "@/lib/upload-file"
 import type { ProButton, QuickReplyOption, Automation } from "@/lib/types"
 import { toast } from "sonner"
 
@@ -69,6 +70,32 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   const [directSend, setDirectSend] = useState(false)
   const [messageVariants, setMessageVariants] = useState<string[]>([])
   const [ruleTags, setRuleTags] = useState<string[]>([])
+  // File sent as a tracked link after the message (see Arquivos page).
+  const [attachedFile, setAttachedFile] = useState<{ id: string; name: string } | null>(null)
+  const [files, setFiles] = useState<UploadedFile[]>([])
+  const [uploadingFile, setUploadingFile] = useState(false)
+
+  useEffect(() => {
+    if (!userId) return
+    fetch(`/api/files?userId=${userId}`)
+      .then((r) => r.json())
+      .then((j) => setFiles(Array.isArray(j.files) ? j.files : []))
+      .catch(() => {})
+  }, [userId])
+
+  async function onUploadFile(file: File | undefined) {
+    if (!file) return
+    setUploadingFile(true)
+    try {
+      const saved = await uploadFile(userId, file)
+      setFiles((current) => [saved, ...current])
+      setAttachedFile({ id: saved.id, name: saved.name })
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setUploadingFile(false)
+    }
+  }
   const [delaySeconds, setDelaySeconds] = useState(0)
   const [typingIndicator, setTypingIndicator] = useState(false)
 
@@ -128,6 +155,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     setDirectSend(content.direct_send === true)
     setMessageVariants(Array.isArray(content.message_variants) ? content.message_variants : [])
     setRuleTags(Array.isArray(content.add_tags) ? content.add_tags : [])
+    setAttachedFile(content.file?.id ? { id: content.file.id, name: content.file.name || "Arquivo" } : null)
     setDelaySeconds(Number(content.delay_seconds) || 0)
     setTypingIndicator(content.typing_indicator === true)
     
@@ -172,7 +200,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
   const thenValid =
     replyMode === "public_only" ||
-    (type === "text" ? messageText.trim().length > 0 : type === "card" ? cardTitle.trim().length > 0 : mediaUrl.trim().length > 0)
+    (type === "text" ? messageText.trim().length > 0 || !!attachedFile : type === "card" ? cardTitle.trim().length > 0 : mediaUrl.trim().length > 0)
   const canSave = whenValid && thenValid && name.trim().length > 0
 
   const stepValid = [
@@ -234,6 +262,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
       content.message = messageText
       const variants = messageVariants.map((v) => v.trim()).filter(Boolean)
       if (variants.length) content.message_variants = variants
+      if (attachedFile) content.file = attachedFile
     } else if (type === "media") {
       content.media = { type: mediaType, url: mediaUrl.trim() }
       if (messageText.trim()) content.message = messageText
@@ -596,6 +625,34 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                           podem ser vistas como spam pelo Instagram.
                         </p>
                         <TagInput sentences value={messageVariants} onChange={setMessageVariants} placeholder="escreva outra versão e aperte Enter" />
+                      </div>
+                      <div className="space-y-2 pt-1">
+                        <FieldLabel>Arquivo para enviar (opcional)</FieldLabel>
+                        <p className="text-[11px] text-muted-foreground">
+                          Vai como um link logo depois da mensagem. Cada pessoa recebe um link próprio e você vê quem abriu. Links
+                          escritos na mensagem também são rastreados.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            aria-label="Arquivo anexado"
+                            value={attachedFile?.id || ""}
+                            onChange={(e) => {
+                              const f = files.find((x) => x.id === e.target.value)
+                              setAttachedFile(f ? { id: f.id, name: f.name } : null)
+                            }}
+                            className="min-w-0 flex-1 rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground"
+                          >
+                            <option value="">Nenhum arquivo</option>
+                            {attachedFile && !files.some((f) => f.id === attachedFile.id) && <option value={attachedFile.id}>{attachedFile.name}</option>}
+                            {files.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                          </select>
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs hover:bg-accent">
+                            {uploadingFile ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                            {uploadingFile ? "Enviando…" : "Enviar novo"}
+                            <input type="file" hidden disabled={uploadingFile} onChange={(e) => void onUploadFile(e.target.files?.[0])}
+                              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,.mp3,.m4a,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.epub" />
+                          </label>
+                        </div>
                       </div>
                     </div>
                   )}
