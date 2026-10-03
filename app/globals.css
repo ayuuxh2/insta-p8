@@ -25,6 +25,8 @@
 
   --primary: oklch(0.18 0 0);
   --primary-foreground: oklch(0.985 0.005 90);
+  /* Single-series chart mark: CEE brand blue family, validated (dataviz) vs. white cards. */
+  --chart-brand: #1a73a8;
 
   --secondary: oklch(0.955 0 0);
   --secondary-foreground: oklch(0.25 0.01 280);
@@ -89,6 +91,8 @@
 
   --primary: oklch(0.97 0.005 90);
   --primary-foreground: oklch(0.13 0.005 280);
+  /* Dark step of the same hue, validated vs. the dark card surface. */
+  --chart-brand: #2e8fc8;
 
   --secondary: oklch(0.24 0.006 280);
   --secondary-foreground: oklch(0.97 0.005 90);
