@@ -49,9 +49,22 @@ export async function createTrackedLink(db: Db, ctx: LinkContext, target: { url?
   return null
 }
 
+// Amazon Associates policy (BR, items v/w) forbids redirects or shorteners that hide that the link
+// goes to Amazon or obscure where the click came from. Amazon links are sent untouched
+// (amzn.to, Amazon's own shortener, is allowed); clicks show up in the Associates reports.
+const NEVER_TRACK_HOSTS = /(^|\.)(amazon\.com\.br|amazon\.com|amzn\.to|amzn\.com|a\.co)$/i
+
+export function canTrack(url: string): boolean {
+  try {
+    return !NEVER_TRACK_HOSTS.test(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
 /** Replaces every http(s) URL in the text with a tracked link (keeps the original if tracking fails). */
 export async function trackUrlsInText(db: Db, ctx: LinkContext, text: string): Promise<string> {
-  const urls = [...new Set(text.match(URL_IN_TEXT) || [])].filter((u) => !u.startsWith(`${appBaseUrl()}/r/`))
+  const urls = [...new Set(text.match(URL_IN_TEXT) || [])].filter((u) => !u.startsWith(`${appBaseUrl()}/r/`) && canTrack(u))
   let result = text
   for (const url of urls) {
     const tracked = await createTrackedLink(db, ctx, { url })
@@ -73,7 +86,7 @@ export async function withFileLink(db: Db, ctx: LinkContext, message: string, fi
 export async function trackCard(db: Db, ctx: LinkContext, card: any): Promise<any> {
   const buttons = await Promise.all(
     (card?.buttons || []).map(async (b: any) => {
-      if (b.type !== "web_url" || !b.url) return b
+      if (b.type !== "web_url" || !b.url || !canTrack(b.url)) return b
       return { ...b, url: (await createTrackedLink(db, ctx, { url: b.url })) || b.url }
     }),
   )

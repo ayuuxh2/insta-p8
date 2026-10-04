@@ -26,7 +26,13 @@ JPG com `sharp` se precisar).
 - **Nunca invente características.** Tudo que for afirmado nos slides, na legenda ou na DM precisa estar no anúncio
   ou ser visível nas fotos. Sem promessas de saúde/resultado, sem "o melhor do Brasil", sem preço nos slides
   (preço muda; na legenda use "confira o preço no link").
-- Se o link for de afiliado ou publi, inclua a identificação na legenda (ex.: "link de afiliado").
+- **Link de afiliado (Amazon, Shopee, Mercado Livre…): sempre identifique na legenda**, ex.: "Link de afiliado:
+  posso receber comissão por compras feitas pelo link" (Amazon Associados exige a divulgação; o CONAR também).
+  Pergunte ao usuário se o link é de afiliado quando não for óbvio (tag `tag=` da Amazon, `amzn.to`, `s.shopee`,
+  `mercadolivre.com/sec`).
+- Links da Amazon são enviados na DM **sem** o encurtador `/r/` do sistema (a política da Amazon proíbe esconder o
+  destino); use o link do SiteStripe (`amzn.to/…` ou o link longo com `tag=`). Os cliques aparecem no painel de
+  Associados, não nas métricas do sistema.
 
 ## 2. Analisar as fotos
 
