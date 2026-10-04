@@ -1,0 +1,62 @@
+{
+  "_comentario": "Configuração da pesquisa de produtos de afiliado (skill /pesquisar-produtos). Comissões conferidas em out/2026; confirme no painel de cada programa.",
+  "amazon": {
+    "tag": "ceestore01-20",
+    "link": "https://www.amazon.com.br/dp/{ASIN}?tag={TAG}",
+    "janela_clique": "24h (89 dias se a pessoa puser no carrinho)",
+    "comissao_por_categoria": {
+      "Bebê": 0.13, "Beleza": 0.13, "Saúde e Cuidados Pessoais": 0.13, "Alimentos e Bebidas": 0.13,
+      "Roupas": 0.11, "Pet Shop": 0.11,
+      "Livros": 0.10,
+      "Dispositivos Amazon": 0.095,
+      "Casa": 0.08, "Cozinha": 0.08, "Ferramentas": 0.08, "Construção e Reforma": 0.08, "Jardim e Piscina": 0.08,
+      "Brinquedos e Jogos": 0.08, "Esportes": 0.08, "Aventura e Lazer": 0.08, "Eletrodomésticos": 0.08, "Móveis": 0.08,
+      "Eletrônicos": 0.08, "Informática": 0.08, "Celulares": 0.08, "Games e Consoles": 0.08,
+      "Calçados": 0.07, "Bolsas, Malas e Mochilas": 0.07, "Automotivo": 0.07, "Outros": 0.07
+    },
+    "politica": [
+      "Não usar robôs para varrer listas da Amazon: o usuário escolhe os produtos e manda os links; analise um a um.",
+      "Não usar imagens da Amazon nos carrosséis (licença não permite baixar/alterar).",
+      "Links Amazon vão direto (sem o encurtador /r/ do sistema). Sempre identificar 'link de afiliado' na legenda."
+    ],
+    "paginas_para_o_usuario": {
+      "Cozinha": "https://www.amazon.com.br/gp/bestsellers/kitchen",
+      "Ferramentas": "https://www.amazon.com.br/gp/bestsellers/hi",
+      "Casa": "https://www.amazon.com.br/gp/bestsellers/home",
+      "Brinquedos": "https://www.amazon.com.br/gp/bestsellers/toys",
+      "Em alta (Cozinha)": "https://www.amazon.com.br/gp/movers-and-shakers/kitchen",
+      "Em alta (Brinquedos)": "https://www.amazon.com.br/gp/movers-and-shakers/toys"
+    }
+  },
+  "mercado_livre": {
+    "janela_clique": "24h",
+    "venda_indireta": "metade da comissão",
+    "comissao_por_categoria": {
+      "Beleza e Cuidado Pessoal": 0.16, "Calçados, Roupas e Bolsas": 0.16, "Esportes e Fitness": 0.16,
+      "Casa, Móveis e Decoração": 0.12, "Ferramentas": 0.12, "Bebês": 0.12, "Brinquedos e Hobbies": 0.12, "Games": 0.12,
+      "Eletrodomésticos": 0.05, "Eletrônicos, Áudio e Vídeo": 0.05, "Celulares e Telefones": 0.05, "Informática": 0.05,
+      "Alimentos e Bebidas": 0
+    },
+    "mais_vendidos": {
+      "Ferramentas": "https://www.mercadolivre.com.br/mais-vendidos/MLB263532",
+      "Casa, Móveis e Decoração": "https://www.mercadolivre.com.br/mais-vendidos/MLB1574",
+      "Brinquedos e Hobbies": "https://www.mercadolivre.com.br/mais-vendidos/MLB1132",
+      "Esportes e Fitness": "https://www.mercadolivre.com.br/mais-vendidos/MLB1276",
+      "Beleza e Cuidado Pessoal": "https://www.mercadolivre.com.br/mais-vendidos/MLB1246"
+    },
+    "link_afiliado": "Gerado pelo usuário no portal de afiliados do Mercado Livre (barra de afiliado no produto)."
+  },
+  "shopee": {
+    "janela_clique": "7 dias",
+    "comissao": "Base da Shopee (por faixa de preço) + Comissão Extra definida por cada vendedor — use os números da planilha/API.",
+    "fonte_sem_api": "Painel de afiliados → Criativo → Feed de produto (planilha com comissão e link de afiliado)",
+    "open_api": "Pedido de acesso enviado/pendente (formulário 'Quero ativar a API')."
+  },
+  "nichos": ["Cozinha e churrasco", "Ferramentas e utilidades domésticas", "Casa e organização", "Brinquedos"],
+  "criterios": {
+    "preco_min": 60,
+    "preco_max": 300,
+    "nota_min": 4.5,
+    "avaliacoes_min": 200
+  }
+}
