@@ -75,6 +75,31 @@ npm.cmd run dev
 O login do Instagram e o webhook só funcionam com HTTPS público (Vercel). Localmente dá para testar o painel e
 enviar eventos simulados assinados com o `INSTAGRAM_APP_SECRET` para `/api/instagram/webhook`.
 
+## Testes automáticos
+
+`scripts/testes/run.mjs` repete os principais cenários (segurança, comentário → trava de seguidor, duplicados,
+SAIR/VOLTAR, contatos/CSV, métricas, arquivos e links, API de agente, LGPD) contra um build local, usando o
+Supabase real com ids falsos e apagando tudo no final. Rode antes de publicar mudanças:
+
+```bash
+npm.cmd run build
+```
+
+Em um terminal (PowerShell): `$env:ADMIN_PASSWORD="teste-local-123456"; npx.cmd next start -p 3400`
+Em outro: `$env:TEST_ADMIN_PASSWORD="teste-local-123456"; node scripts/testes/run.mjs`
+
+## Backup
+
+Preferências → **Baixar backup (.json)**: regras, contatos, histórico, conversas, lista de arquivos e links (sem o
+token). O Supabase gratuito não oferece backup para baixar; faça isso mensalmente.
+
+## Carrosséis de produto
+
+Skill do Claude Code `/novo-post-produto` (`.claude/skills/`): lê o produto, escreve os textos, gera os slides com o
+kit `carrossel/kit/` (Chrome headless), mostra a prévia e, após aprovação, publica pela API de agente
+(`AUTOMATION_API_KEY`) e cria a regra de link só para seguidores. Requer a permissão
+`instagram_business_content_publish` no app da Meta.
+
 ## Licença
 
 MIT (ver `LICENSE`), como o projeto original.

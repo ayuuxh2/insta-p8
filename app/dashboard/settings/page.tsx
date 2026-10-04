@@ -67,6 +67,19 @@ export default function SettingsPage() {
                 {saved ? "Salvo" : "Salvar informações do negócio"}
             </button>
             {userId && <Diagnostics userId={userId} />}
+            {userId && (
+                <section className="mt-12 border-t border-border pt-7">
+                    <h2 className="text-lg font-semibold">Backup</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Baixe uma cópia de todos os dados (regras, contatos, histórico, conversas, lista de arquivos e links).
+                        O plano gratuito do Supabase não guarda backups para você baixar — vale fazer isso uma vez por mês e
+                        guardar o arquivo num lugar seguro (ele contém dados de clientes).
+                    </p>
+                    <a href={`/api/admin/backup?userId=${userId}`} className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium hover:bg-accent">
+                        Baixar backup (.json)
+                    </a>
+                </section>
+            )}
         </div>
     )
 }

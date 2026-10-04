@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { Send, Loader2, MoreVertical, Phone, Video, Zap, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import type { Message } from "@/types/db"
 
 interface ChatWindowProps {
@@ -86,9 +87,13 @@ export function ChatWindow({ conversationId, recipientId, recipientName, userId,
                     created_at: new Date().toISOString()
                 }
                 setMessages(prev => [...prev, newMsg])
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast.error(data.error || "Não foi possível enviar a mensagem.", { duration: 8000 })
             }
         } catch (e) {
             console.error("Send failed", e)
+            toast.error("Sem conexão. Verifique sua internet e tente de novo.")
         } finally {
             setSending(false)
             setIsAutomationOpen(false)

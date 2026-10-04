@@ -26,11 +26,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "db" }, { status: 500 })
   }
 
+  // ?force=1 refreshes now regardless of the expiry date (to verify the mechanism).
+  const force = request.nextUrl.searchParams.get("force") === "1"
   const results: Array<{ username: string; status: string }> = []
   for (const user of users || []) {
     const expiresAt = user.token_expires_at ? new Date(user.token_expires_at).getTime() : 0
     const daysLeft = (expiresAt - Date.now()) / 86_400_000
-    if (daysLeft > REFRESH_WHEN_DAYS_LEFT) {
+    if (daysLeft > REFRESH_WHEN_DAYS_LEFT && !force) {
       results.push({ username: user.username, status: `ok (${Math.floor(daysLeft)} dias restantes)` })
       continue
     }
