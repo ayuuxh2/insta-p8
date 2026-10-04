@@ -1,0 +1,25 @@
+# Publishes the scheduled Reels, carousels and Stories (table scheduled_posts) every 10 minutes.
+# GitHub may start scheduled runs a few minutes late; posts go out at the first run after their time.
+# Uses the same CRON_SECRET repository secret as health-check.yml.
+name: Publicar agenda do Instagram
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-agenda
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Chamar /api/cron/publish
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "Secret CRON_SECRET não configurado"; exit 1; fi
+          curl -fsS --max-time 90 -H "Authorization: Bearer $CRON_SECRET" https://cee-automacao.vercel.app/api/cron/publish

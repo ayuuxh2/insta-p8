@@ -3,12 +3,13 @@ import { type NextRequest, NextResponse } from "next/server"
 import { agentUser, isAgentAuthorized, unauthorized } from "@/lib/agent"
 import { FILES_BUCKET } from "@/lib/files"
 
-// POST /api/agent/upload-url { name } → signed URL to upload one carousel slide (JPEG) to private storage.
+// POST /api/agent/upload-url { name } → signed URL to upload one post file to private storage:
+// a JPEG (carousel slide, photo, Story, Reel cover) or an MP4 (Reel or video Story, up to 50 MB).
 export async function POST(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
   const { name } = await request.json().catch(() => ({}))
-  if (typeof name !== "string" || !/\.jpe?g$/i.test(name)) {
-    return NextResponse.json({ error: "Envie imagens .jpg (o Instagram só publica JPEG)" }, { status: 400 })
+  if (typeof name !== "string" || !/\.(jpe?g|mp4)$/i.test(name)) {
+    return NextResponse.json({ error: "Envie imagens .jpg ou vídeos .mp4 (formatos que o Instagram publica)" }, { status: 400 })
   }
 
   const { db, user } = await agentUser()

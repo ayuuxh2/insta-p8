@@ -27,6 +27,7 @@ privadas por hora (fila para o excedente), **SAIR / VOLTAR** e **EXCLUIR MEUS DA
 | Conversas | Caixa de entrada das DMs |
 | Contatos | Quem interagiu, tags, histórico, exportar CSV, excluir dados |
 | Arquivos | Materiais enviados pelas regras (privados, até 50 MB) |
+| Agenda de posts | Reels, carrosséis e Stories agendados: status, link do post publicado e cancelar |
 | Iniciadores de conversa | Perguntas exibidas quando alguém abre a conversa |
 | Métricas | Funil do comentário ao clique, por dia e por regra |
 | Preferências | Informações do negócio (IA) e **Diagnóstico** (o que aconteceu com cada evento) |
@@ -35,6 +36,8 @@ privadas por hora (fila para o excedente), **SAIR / VOLTAR** e **EXCLUIR MEUS DA
 
 - **Vercel**: site, webhook e rotina diária (`vercel.json`, 1x/dia: renova o token do Instagram, limpa dados antigos e
   mantém o Supabase ativo).
+- **GitHub Actions**: checa a conexão a cada 30 min (`health-check.yml`) e publica a agenda a cada 10 min
+  (`publicar-agenda.yml`), ambos com o secret `CRON_SECRET` do repositório.
 - **Supabase**: banco Postgres e armazenamento privado de arquivos.
 - **Meta**: app com "Instagram API with Instagram Login"; a @cee_webstore é Instagram Tester; app publicado (Live).
 
@@ -64,6 +67,14 @@ ordem os arquivos de `migrations/` que ainda não foram aplicados (todos podem s
 2. `004_etapa4_contatos.sql`
 3. `005_etapa5_arquivos_links.sql`
 4. `006_etapa7_registro.sql`
+5. `007_agenda_publicacoes.sql`
+
+## Conteúdo automático (Reels, Stories, carrosséis)
+
+A skill `/semana-conteudo` gera a semana a partir de fotos (Reels narrados com legenda, Stories e carrosséis),
+mostra uma prévia para aprovação e coloca tudo na fila (`scheduled_posts`). Scripts em `conteudo/kit/` (cada um
+documentado no topo); a fila é publicada por `/api/cron/publish`, que também cria a regra de link de cada post
+(comentário) ou Story (resposta).
 
 ## Desenvolvimento local (Windows)
 
