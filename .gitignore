@@ -35,3 +35,4 @@ carrossel/posts/
 carrossel/referencias/*.png
 conteudo/semanas/
 conteudo/musicas/
+*.local.sql

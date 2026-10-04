@@ -36,8 +36,9 @@ privadas por hora (fila para o excedente), **SAIR / VOLTAR** e **EXCLUIR MEUS DA
 
 - **Vercel**: site, webhook e rotina diária (`vercel.json`, 1x/dia: renova o token do Instagram, limpa dados antigos e
   mantém o Supabase ativo).
-- **GitHub Actions**: checa a conexão a cada 30 min (`health-check.yml`) e publica a agenda a cada 10 min
-  (`publicar-agenda.yml`), ambos com o secret `CRON_SECRET` do repositório.
+- **GitHub Actions**: checa a conexão a cada 30 min (`health-check.yml`) e é reserva da agenda
+  (`publicar-agenda.yml`), ambos com o secret `CRON_SECRET` do repositório. O GitHub atrasa agendamentos em horas,
+  por isso a agenda é disparada a cada 5 min pelo pg_cron do Supabase (`migrations/008_agendador_pg_cron.sql`).
 - **Supabase**: banco Postgres e armazenamento privado de arquivos.
 - **Meta**: app com "Instagram API with Instagram Login"; a @cee_webstore é Instagram Tester; app publicado (Live).
 
@@ -68,6 +69,7 @@ ordem os arquivos de `migrations/` que ainda não foram aplicados (todos podem s
 3. `005_etapa5_arquivos_links.sql`
 4. `006_etapa7_registro.sql`
 5. `007_agenda_publicacoes.sql`
+6. `008_agendador_pg_cron.sql` (troque `<CRON_SECRET>` antes de rodar)
 
 ## Conteúdo automático (Reels, Stories, carrosséis)
 

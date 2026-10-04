@@ -72,7 +72,7 @@ export default function AgendaPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Agenda de posts</h1>
       <p className="mt-1.5 text-sm text-muted-foreground">
         Reels, carrosséis e Stories publicados automaticamente no horário marcado (horário de Brasília). A fila é conferida a
-        cada 10 minutos. {items && `${upcoming.length} na fila.`}
+        cada 5 minutos. {items && `${upcoming.length} na fila.`}
       </p>
     </header>
 

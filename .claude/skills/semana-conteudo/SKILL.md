@@ -20,7 +20,7 @@ Ferramentas (pasta `conteudo/kit/`, documentação no topo de cada arquivo):
 | `agendar.mjs <semana> [--check]` | valida, envia e coloca na fila (`agenda.json`) |
 | `agenda.mjs [--cancelar <id> \| --cancelar-lote <lote>]` | mostra/cancela a fila |
 
-A fila é publicada por `/api/cron/publish` (GitHub Actions a cada 10 min); no painel: **Agenda de posts**.
+A fila é publicada por `/api/cron/publish` (pg_cron do Supabase a cada 5 min; GitHub Actions de reserva); no painel: **Agenda de posts**.
 
 ## Regras que não podem ser quebradas
 

@@ -4,8 +4,9 @@ import { FILES_BUCKET } from "@/lib/files"
 import { sendAlert } from "@/lib/notify"
 import { containerStatus, createContainer, createPostRule, publishContainer, type PostKind } from "@/lib/publishing"
 
-// Publishes the scheduled queue (scheduled_posts). Called every 10 minutes by GitHub Actions
-// (.github/workflows/publicar-agenda.yml) with "Authorization: Bearer $CRON_SECRET".
+// Publishes the scheduled queue (scheduled_posts). Called every 5 minutes by Supabase pg_cron
+// (migrations/008_agendador_pg_cron.sql) and, as a backup, by GitHub Actions (publicar-agenda.yml),
+// always with "Authorization: Bearer $CRON_SECRET".
 //
 // Each item: pending → (due) container created → processing → FINISHED on Instagram → published + rule.
 // Photos finish in seconds and are published in the same run; Reels/videos usually on the next run.

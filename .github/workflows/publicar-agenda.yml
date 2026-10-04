@@ -1,5 +1,6 @@
-# Publishes the scheduled Reels, carousels and Stories (table scheduled_posts) every 10 minutes.
-# GitHub may start scheduled runs a few minutes late; posts go out at the first run after their time.
+# Publishes the scheduled Reels, carousels and Stories (table scheduled_posts).
+# Backup only: GitHub can delay scheduled runs by hours. The main trigger is Supabase pg_cron every 5 minutes
+# (migrations/008_agendador_pg_cron.sql). Posts go out at the first run after their time.
 # Uses the same CRON_SECRET repository secret as health-check.yml.
 name: Publicar agenda do Instagram
 
