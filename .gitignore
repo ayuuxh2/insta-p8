@@ -32,3 +32,4 @@ next-env.d.ts
 /washed_videos/
 carrossel/exemplo/
 carrossel/posts/
+carrossel/referencias/*.png
