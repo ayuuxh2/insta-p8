@@ -7,7 +7,7 @@ export function startInstagramLogin() {
     client_id: (process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID || "").trim(),
     redirect_uri: (process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI || "").trim(),
     response_type: "code",
-    scope: "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments",
+    scope: "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish",
   })
   window.location.href = `https://www.instagram.com/oauth/authorize?${params}`
 }

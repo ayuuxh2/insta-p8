@@ -10,6 +10,8 @@ function isPublic(request: NextRequest): boolean {
   if (pathname === "/api/instagram/webhook") return true
   // Short links sent to customers in DMs.
   if (pathname.startsWith("/r/")) return true
+  // Automation agents (Claude skill); the routes check AUTOMATION_API_KEY themselves.
+  if (pathname.startsWith("/api/agent/")) return true
   // Vercel Cron; the route checks CRON_SECRET itself.
   if (pathname.startsWith("/api/cron/")) return true
   // The OAuth redirect only forwards ?code to the dashboard; the token exchange (POST) stays protected.
