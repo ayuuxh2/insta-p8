@@ -49,17 +49,31 @@ export async function createTrackedLink(db: Db, ctx: LinkContext, target: { url?
   return null
 }
 
-// Amazon Associates policy (BR, items v/w) forbids redirects or shorteners that hide that the link
-// goes to Amazon or obscure where the click came from. Amazon links are sent untouched
-// (amzn.to, Amazon's own shortener, is allowed); clicks show up in the Associates reports.
-const NEVER_TRACK_HOSTS = /(^|\.)(amazon\.com\.br|amazon\.com|amzn\.to|amzn\.com|a\.co)$/i
+// Amazon Associates policy (BR, items v/w) forbids redirects or shorteners that hide that an
+// affiliate link goes to Amazon or obscure where the click came from. Affiliate links (with a
+// tag= parameter) and Amazon's short links (amzn.to/a.co may carry a tag) are sent untouched;
+// their clicks show up in the Associates reports. Plain Amazon links without a tag (the store's
+// own listings) are not affiliate links, so they are tracked like any other link.
+const AMAZON_HOSTS = /(^|\.)(amazon\.com\.br|amazon\.com|amzn\.com)$/i
+const AMAZON_SHORT_HOSTS = /(^|\.)(amzn\.to|a\.co)$/i
 
-export function canTrack(url: string): boolean {
+export function isAmazonAffiliateLink(url: string): boolean {
   try {
-    return !NEVER_TRACK_HOSTS.test(new URL(url).hostname)
+    const u = new URL(url)
+    if (AMAZON_SHORT_HOSTS.test(u.hostname)) return true
+    return AMAZON_HOSTS.test(u.hostname) && (u.searchParams.has("tag") || /[?&/]tag=/i.test(u.href))
   } catch {
     return false
   }
+}
+
+export function canTrack(url: string): boolean {
+  try {
+    new URL(url)
+  } catch {
+    return false
+  }
+  return !isAmazonAffiliateLink(url)
 }
 
 /** Replaces every http(s) URL in the text with a tracked link (keeps the original if tracking fails). */

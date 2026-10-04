@@ -26,13 +26,14 @@ JPG com `sharp` se precisar).
 - **Nunca invente características.** Tudo que for afirmado nos slides, na legenda ou na DM precisa estar no anúncio
   ou ser visível nas fotos. Sem promessas de saúde/resultado, sem "o melhor do Brasil", sem preço nos slides
   (preço muda; na legenda use "confira o preço no link").
-- **Link de afiliado (Amazon, Shopee, Mercado Livre…): sempre identifique na legenda**, ex.: "Link de afiliado:
-  posso receber comissão por compras feitas pelo link" (Amazon Associados exige a divulgação; o CONAR também).
-  Pergunte ao usuário se o link é de afiliado quando não for óbvio (tag `tag=` da Amazon, `amzn.to`, `s.shopee`,
-  `mercadolivre.com/sec`).
-- Links da Amazon são enviados na DM **sem** o encurtador `/r/` do sistema (a política da Amazon proíbe esconder o
-  destino); use o link do SiteStripe (`amzn.to/…` ou o link longo com `tag=`). Os cliques aparecem no painel de
-  Associados, não nas métricas do sistema.
+- **Produto próprio ou de afiliado?** A CEE Store vende produtos próprios na Amazon (ex.: termômetro culinário,
+  chave hidráulica 8 em 1, misturador para furadeira) e também divulga produtos como afiliada. Se não for óbvio,
+  pergunte. Sinais de afiliado: `tag=` no link da Amazon, `amzn.to`, `s.shopee`, `mercadolivre.com/sec`.
+- **Link de afiliado: sempre identifique na legenda**, ex.: "Link de afiliado: posso receber comissão por compras
+  feitas pelo link" (Amazon Associados exige; o CONAR também). Produto próprio não leva tag nem esse aviso.
+- O sistema envia links de afiliado da Amazon (com `tag=`) e links `amzn.to` **sem** o encurtador `/r/` (a política
+  da Amazon proíbe esconder o destino); os cliques aparecem no painel de Associados. Links da Amazon sem tag
+  (produtos próprios) e das outras lojas são rastreados normalmente.
 
 ## 2. Analisar as fotos
 
