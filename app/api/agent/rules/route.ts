@@ -7,7 +7,8 @@ const strList = (v: unknown, max = 10) => (Array.isArray(v) ? v.map((x) => str(x
 
 // POST /api/agent/rules — creates the comment rule for a published post.
 // { mediaId, name, keywords[], message, messageVariants?, link?, checkFollow?, publicReplies?, tags?,
-//   optinTitle?, optinSubtitle?, optinButton?, replyMode? }
+//   optinTitle?, optinSubtitle?, optinButton?, replyMode?, anyComment? }
+// anyComment: true answers every comment on the post (keywords become optional).
 export async function POST(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
   const body = await request.json().catch(() => ({}))
@@ -15,8 +16,9 @@ export async function POST(request: NextRequest) {
   const keywords = strList(body.keywords, 5).map((k) => k.toLowerCase().replace(/,/g, " "))
   const message = str(body.message, 950)
   const link = str(body.link, 500)
-  if (!body.mediaId || !keywords.length || !message) {
-    return NextResponse.json({ error: "Informe mediaId, keywords e message" }, { status: 400 })
+  const anyComment = body.anyComment === true
+  if (!body.mediaId || (!keywords.length && !anyComment) || !message) {
+    return NextResponse.json({ error: "Informe mediaId, keywords (ou anyComment) e message" }, { status: 400 })
   }
   if (link && !/^https?:\/\//i.test(link)) return NextResponse.json({ error: "Link inválido" }, { status: 400 })
 
@@ -46,10 +48,10 @@ export async function POST(request: NextRequest) {
     .from("automations")
     .insert({
       user_id: user.id,
-      name: str(body.name, 120) || `Post: ${keywords[0]}`,
+      name: str(body.name, 120) || `Post: ${anyComment ? "todos os comentários" : keywords[0]}`,
       trigger_source: "comment",
-      trigger_type: "keyword",
-      trigger_value: keywords.join(", "),
+      trigger_type: anyComment ? "reply_all" : "keyword",
+      trigger_value: anyComment ? "ALL_COMMENTS" : keywords.join(", "),
       response_type: "pro",
       response_content: content,
       is_active: true,

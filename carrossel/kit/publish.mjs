@@ -13,6 +13,7 @@
 //   "ruleName": "Afiador de facas — FIO",
 //   "tags": ["afiador", "churrasco"],          // opcional
 //   "checkFollow": true,                       // só para seguidores (padrão true)
+//   "anyComment": false,                       // true: responde a QUALQUER comentário do post (keywords viram opcionais)
 //   "publicReplies": ["Te mandei no direct! 📩"], // opcional
 //   "optinTitle": "", "optinSubtitle": "", "optinButton": ""   // opcional (cartão "Quero receber")
 // }
@@ -62,7 +63,7 @@ const problems = []
 const keyword = String(carousel.keyword || "").toLowerCase()
 if (slides.length !== carousel.slides.length) problems.push(`out/ tem ${slides.length} imagens, mas carrossel.json tem ${carousel.slides.length} slides (rode o build de novo)`)
 if (!post.caption || post.caption.length > 2200) problems.push("legenda vazia ou acima de 2.200 caracteres")
-if (!Array.isArray(post.keywords) || !post.keywords.length) problems.push("keywords vazio")
+if (!Array.isArray(post.keywords) || !post.keywords.length) { if (!post.anyComment) problems.push("keywords vazio") }
 else if (post.keywords[0].toLowerCase() !== keyword) problems.push(`a 1ª keyword ("${post.keywords[0]}") não é a do slide final ("${carousel.keyword}")`)
 if (keyword && !post.caption?.toLowerCase().includes(keyword)) problems.push(`a legenda não menciona a palavra "${carousel.keyword}"`)
 if (!post.dmMessage) problems.push("dmMessage vazio")
@@ -120,6 +121,7 @@ const { rule } = await api("rules", {
     optinSubtitle: post.optinSubtitle,
     optinButton: post.optinButton,
     replyMode: post.replyMode,
+    anyComment: post.anyComment === true,
   }),
 })
 console.log(`Regra criada: "${rule.name}" (palavras: ${rule.trigger_value})`)
