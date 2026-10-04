@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { checkInstagramHealth, HEALTH_TEXT } from "@/lib/health"
 import { sendAlert } from "@/lib/notify"
+import { minutesSincePublishRun } from "@/lib/publishing"
 
 // Frequent health check (GitHub Actions every 30 min; Vercel's free cron is daily only).
 // Protected by CRON_SECRET, like the daily job. Sends an alert when access is down.
@@ -29,6 +30,13 @@ export async function GET(request: NextRequest) {
       console.warn(`[health] @${user.username} down: ${health.reason} (${health.code}) alert=${sent}`)
     }
     results.push({ username: user.username, ok: health.ok, reason: health.reason || null })
+  }
+
+  // The publishing queue must run every 5 min (Supabase pg_cron); warn if it stopped while posts are waiting.
+  const stalled = await minutesSincePublishRun(db)
+  if (stalled === null || stalled > 30) {
+    const { count } = await db.from("scheduled_posts").select("id", { count: "exact", head: true }).eq("status", "pending")
+    if (count) await sendAlert(db, "scheduler-stalled", "agenda de posts parada", `${count} posts na fila e o agendador não roda há ${stalled ?? "?"} min. Confira o pg_cron no Supabase (migrations/008_agendador_pg_cron.sql).`)
   }
   return NextResponse.json({ ok: true, results })
 }

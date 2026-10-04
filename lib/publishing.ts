@@ -6,6 +6,15 @@ import { normalizeTags } from "@/lib/contacts"
 const GRAPH = "https://graph.instagram.com/v24.0"
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** processed_events key touched by every /api/cron/publish run. */
+export const PUBLISH_HEARTBEAT = "heartbeat:cron-publish"
+
+/** Minutes since the publishing queue last ran (null: never). */
+export async function minutesSincePublishRun(db: any): Promise<number | null> {
+  const { data } = await db.from("processed_events").select("created_at").eq("event_key", PUBLISH_HEARTBEAT).maybeSingle()
+  return data?.created_at ? Math.round((Date.now() - Date.parse(data.created_at)) / 60_000) : null
+}
+
 export type PostKind = "carousel" | "image" | "reel" | "story"
 export const POST_KINDS: PostKind[] = ["carousel", "image", "reel", "story"]
 export const isVideo = (pathOrUrl: string) => /\.mp4(\?|$)/i.test(pathOrUrl)

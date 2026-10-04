@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { FILES_BUCKET } from "@/lib/files"
 import { sendAlert } from "@/lib/notify"
-import { containerStatus, createContainer, createPostRule, publishContainer, type PostKind } from "@/lib/publishing"
+import { PUBLISH_HEARTBEAT, containerStatus, createContainer, createPostRule, publishContainer, type PostKind } from "@/lib/publishing"
 
 // Publishes the scheduled queue (scheduled_posts). Called every 5 minutes by Supabase pg_cron
 // (migrations/008_agendador_pg_cron.sql) and, as a backup, by GitHub Actions (publicar-agenda.yml),
@@ -44,6 +44,8 @@ export async function GET(request: NextRequest) {
   const started = Date.now()
   const db = await getSupabaseServerClient()
   const log: string[] = []
+  // Heartbeat: lets /api/agent/status and the health check tell whether the scheduler is running.
+  await db.from("processed_events").upsert({ event_key: PUBLISH_HEARTBEAT, created_at: now() }, { onConflict: "event_key" })
 
   const { data: users } = await db.from("users").select("id, username, access_token")
   const tokenOf = new Map<number, string>((users || []).filter((u: any) => u.access_token).map((u: any) => [u.id, u.access_token]))

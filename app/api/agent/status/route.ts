@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { agentUser, isAgentAuthorized, unauthorized } from "@/lib/agent"
 import { checkInstagramHealth, HEALTH_TEXT } from "@/lib/health"
+import { minutesSincePublishRun } from "@/lib/publishing"
 
 // GET /api/agent/status — connection health, publishing permission and remaining daily posts.
 export async function GET(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
-  const { user } = await agentUser()
+  const { db, user } = await agentUser()
   if (!user) return NextResponse.json({ ok: false, error: "Nenhuma conta do Instagram conectada" })
 
   const health = await checkInstagramHealth(user.access_token)
@@ -27,5 +28,7 @@ export async function GET(request: NextRequest) {
     username: user.username,
     connection: health.ok ? "ok" : HEALTH_TEXT[health.reason!].title,
     publishing,
+    // Minutes since the scheduled queue last ran (pg_cron every 5 min); null = never ran.
+    scheduler: { minutesSinceLastRun: await minutesSincePublishRun(db) },
   })
 }
