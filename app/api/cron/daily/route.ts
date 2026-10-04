@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { checkInstagramHealth, HEALTH_TEXT } from "@/lib/health"
+import { sendAlert } from "@/lib/notify"
 
 // Daily job (vercel.json). Vercel sends "Authorization: Bearer $CRON_SECRET".
 // - Refreshes long-lived Instagram tokens before they expire (they last ~60 days).
@@ -78,6 +80,15 @@ export async function GET(request: NextRequest) {
   for (const [table, column, olderThan] of purges) {
     const { error: e } = await supabase.from(table).delete().lt(column, olderThan)
     if (e) console.error(`[cron] ${table} purge failed:`, e.message)
+  }
+
+  // Fallback health check (the GitHub Actions check every 30 min is the main one).
+  for (const user of users || []) {
+    const health = await checkInstagramHealth(user.access_token)
+    if (!health.ok && health.reason) {
+      const text = HEALTH_TEXT[health.reason]
+      await sendAlert(supabase, `health:${user.id}:${health.reason}`, text.title, `@${user.username}: ${text.action}\n\nDetalhe da Meta: ${health.message || health.reason}`)
+    }
   }
 
   console.log("[cron] daily:", JSON.stringify(results))

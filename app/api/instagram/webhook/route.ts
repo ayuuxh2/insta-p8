@@ -35,6 +35,8 @@ import {
 } from "@/lib/antispam"
 import { recordEvent, setFollows, addTags, setUsernameIfMissing, deleteContactData, isDeleteRequest, DELETE_CONFIRMATION } from "@/lib/contacts"
 import { trackUrlsInText, withFileLink, trackCard } from "@/lib/links"
+import { classifyGraphError, HEALTH_TEXT } from "@/lib/health"
+import { sendAlert } from "@/lib/notify"
 
 // Work continues after the 200 response (see after()); give it room for human-like delays.
 export const maxDuration = 60
@@ -180,8 +182,18 @@ function responsePreviewText(content: any, message?: string): string {
 async function tracked(db: Db, user: any, recipient: Recipient, send: Promise<SendResult>): Promise<SendResult> {
   const result = await send
   if (result?.ok) await logSend(db, user.id, recipient.comment_id ? "private_reply" : "dm")
-  else user.lastSendError = describeGraphError(result?.error)
+  else await onSendError(db, user, result?.error)
   return result
+}
+
+/** Keeps the error for the event log and alerts the owner right away if access is down. */
+async function onSendError(db: Db, user: any, error: any) {
+  user.lastSendError = describeGraphError(error)
+  const health = classifyGraphError(error)
+  if (!health.ok && health.reason) {
+    const text = HEALTH_TEXT[health.reason]
+    await sendAlert(db, `health:${user.id}:${health.reason}`, text.title, `@${user.username}: ${text.action}\n\nDetalhe da Meta: ${health.message || health.reason}`)
+  }
 }
 
 /** Outcome for the event log, including Instagram's error when a send failed. */
@@ -290,7 +302,7 @@ async function sendPublicReply(db: Db, user: any, content: any, commentId: strin
       : DEFAULT_PUBLIC_REPLIES
   const result = await replyToComment(user.access_token, commentId, pickRandom(pool))
   if (result.ok) await logSend(db, user.id, "public_reply")
-  else user.lastSendError = describeGraphError(result.error)
+  else await onSendError(db, user, result.error)
   return result.ok
 }
 
