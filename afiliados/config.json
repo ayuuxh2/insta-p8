@@ -44,12 +44,14 @@
       "Esportes e Fitness": "https://www.mercadolivre.com.br/mais-vendidos/MLB1276",
       "Beleza e Cuidado Pessoal": "https://www.mercadolivre.com.br/mais-vendidos/MLB1246"
     },
-    "link_afiliado": "Gerado pelo usuário no portal de afiliados do Mercado Livre (barra de afiliado no produto)."
+    "etiqueta": "cidivirtu",
+    "link_afiliado": "Gerado pelo navegador do usuário (logado como afiliado): página do produto → barra preta 'Afiliados' no topo → botão azul 'Compartilhar' → painel 'Gerar link / ID de produto' → campo 'Link do produto' (https://meli.la/...). A barra também mostra a comissão real do produto ('GANHOS 12%'). O link abre o perfil social do afiliado com o produto e a etiqueta; gerar o link adiciona o produto à lista 'Minhas recomendações'."
   },
   "shopee": {
     "janela_clique": "7 dias",
     "comissao": "Base da Shopee (por faixa de preço) + Comissão Extra definida por cada vendedor — use os números da planilha/API.",
-    "fonte_sem_api": "Painel de afiliados → Criativo → Feed de produto (planilha com comissão e link de afiliado)",
+    "fonte_sem_api": "Painel de afiliados → Criativo → Feed de produto (CSV de ~200 MB das lojas oficiais; SEM coluna de comissão e SEM o ID de afiliado no link). Ler com: node afiliados/shopee-feed.mjs <csv> \"<categoria>\"",
+    "link_afiliado": "O link do feed (shope.ee/an_redir?origin_link=...) não traz affiliate_id: gerar no painel em Oferta → Link personalizado, ou acrescentar &affiliate_id=<ID> quando o usuário informar o ID.",
     "open_api": "Pedido de acesso enviado/pendente (formulário 'Quero ativar a API')."
   },
   "nichos": ["Cozinha e churrasco", "Ferramentas e utilidades domésticas", "Casa e organização", "Brinquedos"],

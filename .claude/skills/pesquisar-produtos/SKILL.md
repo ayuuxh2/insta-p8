@@ -16,7 +16,10 @@ Configuração (tag da Amazon, tabelas de comissão, nichos, critérios, links d
 - **Imagens da Amazon não vão para carrosséis** (a licença não permite baixar/alterar). Para os posts, use
   imagens do vendedor (Mercado Livre/Shopee, quando liberadas para divulgação) ou IA **apenas como cenário**.
 - **Links:** Amazon = `https://www.amazon.com.br/dp/<ASIN>?tag=ceestore01-20` (montado automaticamente).
-  Mercado Livre e Shopee: o usuário gera o link de afiliado no painel de cada programa (diga qual produto).
+  Mercado Livre: gere pelo navegador do usuário (passo a passo em `config.mercado_livre.link_afiliado`) **só para
+  os produtos que ele escolher para postar** (cada geração entra na lista "Minhas recomendações" dele); a barra de
+  afiliado também confirma a comissão real. Shopee: o link do feed não tem o ID de afiliado — veja
+  `config.shopee.link_afiliado`.
 - **Divulgação:** todo post com link de afiliado identifica "link de afiliado" na legenda.
 - Nunca invente nota, número de vendas ou comissão. Se não souber, diga "não informado".
 
@@ -32,9 +35,11 @@ produtos na lista final (padrão: 10).
 pelo menu de categorias da página de mais vendidos se o link direto não abrir). Leitura pontual de poucas páginas,
 como uma visita normal — não fique varrendo. Colete: posição, título, preço atual, nota, "+N vendidos", frete grátis.
 
-**Shopee** — se o usuário mandar a planilha do **Feed de produto** (painel de afiliados → Criativo → Feed de
-produto), leia-a (CSV/XLSX) e use a comissão e o link que vierem nela. Se a Open API estiver liberada
-(`config.shopee.open_api`), use-a. Sem nenhum dos dois, peça a planilha.
+**Shopee** — se o usuário mandar o link de download do **Feed de produto** (painel → Criativo → Feed de produto),
+baixe com curl para a pasta temporária e rode `node afiliados/shopee-feed.mjs <csv> "<categoria>"` (use
+`--categorias` para ver os nomes; ex.: "Tools & Home Improvement", "Kitchenware", "Toys"). O feed não tem
+comissão nem vendas: ordene por curtidas, nota e desconto e diga que a comissão deve ser vista no painel
+(Oferta de produto). Se a Open API estiver liberada (`config.shopee.open_api`), prefira-a.
 
 **Amazon** — peça ao usuário os links (ou ASINs) que ele separou nas páginas de mais vendidos/em alta. Para cada um,
 leia a página do produto (firecrawl_scrape, uma por vez) para pegar título, categoria, preço, nota e nº de
