@@ -25,8 +25,10 @@ const esc = (s = "") => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").r
 // (highlighted words never break apart across lines)
 const rich = (s = "") =>
   esc(s)
-    .replace(/\*(.+?)\*/g, (_, words) => `<span class="hl">${words.replace(/ /g, "&nbsp;")}</span>`)
+    .replace(/\*([\s\S]+?)\*/g, (_, words) => `<span class="hl">${words.replace(/ /g, "&nbsp;")}</span>`)
     .replace(/\n/g, "<br>")
+    // Fraunces only ships old-style figures ("35" reads like "55"): digits use Inter instead.
+    .replace(/(<[^>]*>|&[a-z]+;)|(\d[\d.,]*)/g, (m, tag, num) => (tag ? tag : `<span class="num">${num}</span>`))
 
 function page({ body, background, counter, total, dark }) {
   return `<!doctype html>
@@ -38,6 +40,7 @@ function page({ body, background, counter, total, dark }) {
   html, body { width: 1080px; height: 1350px; overflow: hidden; }
   body { font-family: "Inter", system-ui, sans-serif; background: ${background}; color: ${dark ? "#fff" : BRAND.ink}; position: relative; -webkit-font-smoothing: antialiased; }
   .display { font-family: "Fraunces", Georgia, serif; font-weight: 800; letter-spacing: -0.02em; line-height: 0.98; }
+  .num { font-family: "Inter", system-ui, sans-serif; } .display .num { font-weight: 800; letter-spacing: -0.04em; }
   .hl { color: ${BRAND.accent}; }
   .light .hl { color: ${BRAND.navy}; background: linear-gradient(transparent 62%, ${BRAND.accent} 62%, ${BRAND.accent} 92%, transparent 92%); padding: 0 6px; }
   .counter { position: absolute; top: 56px; right: 64px; font-size: 26px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.75; }
@@ -160,7 +163,7 @@ ${s.image ? `<div style="position:absolute;inset:0;${photo(s.image, s.focus, s.z
 <div style="position:absolute;left:64px;right:64px;top:110px;bottom:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
   <h2 class="display" style="font-size:${s.titleSize || 118}px;color:#fff">${rich(s.title || "Quer o link?")}</h2>
   <p style="margin-top:64px;font-size:44px;font-weight:600;color:rgba(255,255,255,0.9)">Comente a palavra</p>
-  <div class="display" style="margin-top:30px;padding:34px 80px;border-radius:32px;background:${BRAND.accent};color:${BRAND.navyDeep};font-size:150px;font-weight:900;letter-spacing:0.02em;box-shadow:0 24px 60px rgba(0,0,0,0.35)">${esc(ctx.keyword)}</div>
+  <div class="display" style="margin-top:30px;padding:34px 80px;border-radius:32px;background:${BRAND.accent};color:${BRAND.navyDeep};font-size:${ctx.keyword.length > 6 ? 112 : 150}px;font-weight:900;letter-spacing:0.02em;box-shadow:0 24px 60px rgba(0,0,0,0.35)">${esc(ctx.keyword)}</div>
   <p style="margin-top:64px;font-size:40px;line-height:1.4;color:rgba(255,255,255,0.9)">${rich(s.text || "que eu te mando o link no *direct* 📩")}</p>
   <p style="margin-top:26px;font-size:30px;color:rgba(255,255,255,0.72)">${rich(s.note || "Exclusivo para quem segue a " + BRAND.handle)}</p>
 </div>

@@ -72,7 +72,7 @@ function titleHtml(scene, index, total) {
     return base(`<div style="position:absolute;left:80px;right:80px;top:470px;text-align:center;">
   <p style="font-size:54px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.9)">${rich(scene.title || "Quer o link?")}</p>
   <p style="margin-top:70px;font-size:64px;font-weight:700;">Comente</p>
-  <div style="display:inline-block;margin-top:26px;padding:26px 64px;border-radius:32px;background:${BRAND.accent};color:${BRAND.navyDeep};font-size:150px;font-weight:900;letter-spacing:0.04em;box-shadow:0 20px 60px rgba(0,0,0,0.35)">${esc(keyword || "EU QUERO")}</div>
+  <div style="display:inline-block;margin-top:26px;padding:26px 64px;border-radius:32px;background:${BRAND.accent};color:${BRAND.navyDeep};font-size:${(keyword || "EU QUERO").length > 6 ? 112 : 150}px;font-weight:900;letter-spacing:0.04em;box-shadow:0 20px 60px rgba(0,0,0,0.35)">${esc(keyword || "EU QUERO")}</div>
   <p style="margin-top:46px;font-size:52px;font-weight:700;line-height:1.25;">que eu te mando<br>o link no direct 📩</p>
   <p style="margin-top:60px;font-size:36px;font-weight:600;color:rgba(255,255,255,0.75)">Exclusivo para quem segue a ${BRAND.handle}</p>
 </div>
