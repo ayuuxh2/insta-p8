@@ -12,6 +12,13 @@ export async function GET(request: NextRequest) {
   }
 
   const db = await getSupabaseServerClient()
+
+  // ?test=1 sends a test notification to confirm the alert channel works.
+  if (request.nextUrl.searchParams.get("test") === "1") {
+    const sent = await sendAlert(db, `test:${Date.now()}`, "teste de alerta", "Se você recebeu isto, os alertas estão funcionando. ✅")
+    return NextResponse.json({ ok: true, test: sent ? "enviado" : "nenhum canal configurado (NTFY_TOPIC / RESEND_API_KEY)" })
+  }
+
   const { data: users } = await db.from("users").select("id, username, access_token")
   const results = []
   for (const user of users || []) {
