@@ -85,19 +85,30 @@ export const UNLOCK_PAYLOAD_PREFIX = "UNLOCK_CONTENT_"
  * First message of a follow-gated comment rule, sent as a private reply.
  * Instagram only lets us check `is_user_follow_business` after the person
  * interacts in the DM, so we ask them to tap a button before checking.
+ * With `followUsername` (follow-gated rules) the card also offers "Seguir" up front: whoever
+ * follows before tapping gets the content right away, skipping the slow "message request" round trip.
  */
 export function buildOptInCard(params: {
   ruleId: string
   title?: string
   subtitle?: string
   buttonTitle?: string
+  followUsername?: string
 }): IGCard {
+  const want: IGButton = {
+    type: "postback",
+    title: (params.buttonTitle?.trim() || "Quero receber").slice(0, 20),
+    payload: `${OPTIN_PAYLOAD_PREFIX}${params.ruleId}`,
+  }
+  const defaultSubtitle = params.followUsername
+    ? `Só para quem segue a @${params.followUsername}. Siga e toque em "${want.title}" 👇`
+    : "Toque no botão abaixo que eu te envio aqui no direct."
   return {
     title: params.title?.trim() || "Quer receber? 🎁",
-    subtitle: params.subtitle?.trim() || "Toque no botão abaixo que eu te envio aqui no direct.",
-    buttons: [
-      { type: "postback", title: (params.buttonTitle?.trim() || "Quero receber").slice(0, 20), payload: `${OPTIN_PAYLOAD_PREFIX}${params.ruleId}` },
-    ],
+    subtitle: (params.subtitle?.trim() || defaultSubtitle).slice(0, 80),
+    buttons: params.followUsername
+      ? [{ type: "web_url", url: `https://instagram.com/${params.followUsername}`, title: "Seguir" }, want]
+      : [want],
   }
 }
 

@@ -160,9 +160,12 @@ function keywordMatches(triggerValue: string, text: string): boolean {
   return matchedKeyword(triggerValue, text) !== null
 }
 
-/** Sends the rule content and records "content_sent" for the contact. */
-async function deliver(db: Db, user: any, senderId: string, rule: any, content: any): Promise<string | null> {
-  const preview = await sendRuleContent(db, user, senderId, rule, content)
+/**
+ * Sends the rule content and records "content_sent" for the contact.
+ * `instant` (button taps) skips the human-like delay: the person is waiting on screen.
+ */
+async function deliver(db: Db, user: any, senderId: string, rule: any, content: any, instant = false): Promise<string | null> {
+  const preview = await sendRuleContent(db, user, senderId, rule, content, instant)
   if (preview) await recordEvent(db, user.id, senderId, "content_sent", { automationId: rule.id })
   return preview
 }
@@ -222,13 +225,13 @@ async function buildMessage(db: Db, user: any, rule: any, recipientId: string, c
   return text ? trackUrlsInText(db, ctx, text) : ""
 }
 
-async function sendRuleContent(db: Db, user: any, recipientId: string, rule: any, content: any): Promise<string | null> {
+async function sendRuleContent(db: Db, user: any, recipientId: string, rule: any, content: any, instant = false): Promise<string | null> {
   const token = user.access_token
   const recipient = { id: recipientId }
   const useTyping = content.typing_indicator === true
 
   if (useTyping) await sendSenderAction(token, recipientId, "typing_on")
-  await wait(humanDelayMs(content))
+  if (!instant) await wait(humanDelayMs(content))
 
   const quickReplies = Array.isArray(content.quick_replies)
     ? content.quick_replies
@@ -290,6 +293,7 @@ async function sendPrivateReply(db: Db, user: any, rule: any, content: any, comm
         title: content.optin_title,
         subtitle: content.optin_subtitle,
         buttonTitle: content.optin_button,
+        followUsername: content.check_follow === true ? user.username : undefined,
       }),
     ),
   )
@@ -315,7 +319,7 @@ async function sendPublicReply(db: Db, user: any, content: any, commentId: strin
 //                  re-checks, one "couldn't verify" message, then stop.
 // Returns the inbox preview of what was sent, or null if nothing was sent.
 // ============================================================
-async function runFollowGate(db: Db, user: any, senderId: string, rule: any, content: any, isRecheck: boolean): Promise<string | null> {
+async function runFollowGate(db: Db, user: any, senderId: string, rule: any, content: any, isRecheck: boolean, instant = false): Promise<string | null> {
   const token = user.access_token
   const recipient = { id: senderId }
   const attemptKey = unlockKey(senderId, rule.id)
@@ -325,10 +329,10 @@ async function runFollowGate(db: Db, user: any, senderId: string, rule: any, con
 
   if (follows === true) {
     await clearUnlockAttempts(attemptKey)
-    return deliver(db, user, senderId, rule, content)
+    return deliver(db, user, senderId, rule, content, instant)
   }
 
-  await wait(humanDelayMs({}))
+  if (!instant) await wait(humanDelayMs({}))
   if (follows === false) {
     await clearUnlockAttempts(attemptKey)
     const card = isRecheck
@@ -782,10 +786,12 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
   if (content.mark_seen !== false) await sendSenderAction(user.access_token, senderId, "mark_seen")
 
   // Postbacks, messages and story replies are DM interactions, so the follow check is valid here.
+  // Button taps answer without the human-like delay: the person is looking at the screen.
+  const instant = triggerType === "postback"
   const preview =
     content.check_follow === true
-      ? await runFollowGate(db, user, senderId, match, content, isUnlockEvent)
-      : await deliver(db, user, senderId, match, content)
+      ? await runFollowGate(db, user, senderId, match, content, isUnlockEvent, instant)
+      : await deliver(db, user, senderId, match, content, instant)
   await reply(preview)
   return sendOutcome(user, !!preview, `"${match.name}": ${preview && preview.startsWith("[") ? preview : "conteúdo enviado"}`)
 }
