@@ -11,6 +11,7 @@
 //     { "type": "benefits", "kicker": "...", "title": "...", "items": [{ "title": "...", "text": "..." }] },
 //     { "type": "steps", "title": "...", "items": [{ "title": "...", "text": "..." }], "image": "...", "focus": "..." },
 //     { "type": "cta", "title": "Quer o link?", "text": "...", "note": "...", "image": "..." }
+// Any slide: "counter": false hides the N/total counter.
 //   ]
 // }
 
@@ -54,7 +55,7 @@ spec.slides.forEach((slide, i) => {
   if (!template) throw new Error(`Tipo de slide desconhecido: ${slide.type}`)
   const s = { ...slide, image: slide.image ? path.resolve(dir, slide.image) : undefined }
   if (s.image && !existsSync(s.image)) throw new Error(`Foto não encontrada: ${slide.image}`)
-  const html = template(s, { index: i + 1, total, keyword: (spec.keyword || "QUERO").toUpperCase() })
+  const html = template(s, { index: slide.counter === false ? 0 : i + 1, total, keyword: (spec.keyword || "QUERO").toUpperCase() })
   const htmlPath = path.join(htmlDir, `slide-${i + 1}.html`)
   writeFileSync(htmlPath, html)
   const png = path.join(outDir, `slide-${i + 1}.png`)

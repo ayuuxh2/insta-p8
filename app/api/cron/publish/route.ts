@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { FILES_BUCKET } from "@/lib/files"
 import { sendAlert } from "@/lib/notify"
-import { PUBLISH_HEARTBEAT, containerStatus, createContainer, createPostRule, publishContainer, type PostKind } from "@/lib/publishing"
+import { CHILDREN_PREFIX, PUBLISH_HEARTBEAT, containerStatus, createCarouselChildren, createCarouselParent, createContainer, createPostRule, publishContainer, type PostKind } from "@/lib/publishing"
 
 // Publishes the scheduled queue (scheduled_posts). Called every 5 minutes by Supabase pg_cron
 // (migrations/008_agendador_pg_cron.sql) and, as a backup, by GitHub Actions (publicar-agenda.yml),
@@ -10,6 +10,8 @@ import { PUBLISH_HEARTBEAT, containerStatus, createContainer, createPostRule, pu
 //
 // Each item: pending → (due) container created → processing → FINISHED on Instagram → published + rule.
 // Photos finish in seconds and are published in the same run; Reels/videos usually on the next run.
+// Carousels: items are created first (container_id "children:…"); once every item is FINISHED the
+// carousel container is created and published like the rest.
 // Failures retry up to 3 times (15 min apart), then the item is marked failed and an alert is sent.
 
 export const maxDuration = 60
@@ -117,6 +119,25 @@ export async function GET(request: NextRequest) {
       return true
     }
     try {
+      if (row.container_id!.startsWith(CHILDREN_PREFIX)) {
+        const children = row.container_id!.slice(CHILDREN_PREFIX.length).split(",")
+        const states = await Promise.all(children.map((id) => containerStatus(token, id)))
+        const bad = states.find((s) => s.status === "ERROR" || s.status === "EXPIRED")
+        if (bad) {
+          await fail(row, `o Instagram recusou um item do carrossel (${bad.detail || bad.status})`, true)
+          return true
+        }
+        if (!states.every((s) => s.status === "FINISHED")) {
+          const since = row.processing_since ? Date.parse(row.processing_since) : Date.now()
+          if (Date.now() - since > PROCESSING_TIMEOUT_MIN * 60_000) {
+            await fail(row, "o Instagram não terminou de processar os vídeos do carrossel", true)
+            return true
+          }
+          return false
+        }
+        row.container_id = await createCarouselParent(token, children, row.caption)
+        await update(row.id, { container_id: row.container_id })
+      }
       const { status, detail } = await containerStatus(token, row.container_id!)
       if (status === "FINISHED") {
         await finish(row, token, row.container_id!)
@@ -186,7 +207,10 @@ export async function GET(request: NextRequest) {
       if (error || !signed?.every((s: any) => s.signedUrl)) throw new Error("arquivos não encontrados no armazenamento")
       const urls = signed.map((s: any) => s.signedUrl as string)
       const coverUrl = row.cover_path ? urls.pop()! : null
-      const containerId = await createContainer(token, row.kind, urls, row.caption, coverUrl)
+      const containerId =
+        row.kind === "carousel"
+          ? CHILDREN_PREFIX + (await createCarouselChildren(token, urls)).join(",")
+          : await createContainer(token, row.kind, urls, row.caption, coverUrl)
       await update(row.id, { container_id: containerId })
       const fresh = { ...row, container_id: containerId }
       if (!(await check(fresh))) waiting.push(fresh)

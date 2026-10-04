@@ -10,6 +10,8 @@ function isPublic(request: NextRequest): boolean {
   if (pathname === "/api/instagram/webhook") return true
   // Short links sent to customers in DMs.
   if (pathname.startsWith("/r/")) return true
+  // Public "link da bio" page and its product images.
+  if (pathname === "/links" || pathname.startsWith("/api/vitrine/img/")) return true
   // Automation agents (Claude skill); the routes check AUTOMATION_API_KEY themselves.
   if (pathname.startsWith("/api/agent/")) return true
   // Vercel Cron; the route checks CRON_SECRET itself.

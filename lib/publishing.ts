@@ -75,6 +75,24 @@ export async function createContainer(token: string, kind: PostKind, urls: strin
   return (await graph(token, "me/media", { method: "POST", body: { media_type: "CAROUSEL", children: children.join(","), caption } })).id
 }
 
+/** Carousel items, created without waiting (videos can take minutes to process). */
+export async function createCarouselChildren(token: string, urls: string[]): Promise<string[]> {
+  if (urls.length < 2 || urls.length > 10) throw new Error("Carrossel precisa de 2 a 10 itens")
+  const children: string[] = []
+  for (const url of urls) {
+    const body = isVideo(url) ? { media_type: "VIDEO", video_url: url, is_carousel_item: true } : { image_url: url, is_carousel_item: true }
+    children.push((await graph(token, "me/media", { method: "POST", body })).id)
+  }
+  return children
+}
+
+export async function createCarouselParent(token: string, children: string[], caption: string): Promise<string> {
+  return (await graph(token, "me/media", { method: "POST", body: { media_type: "CAROUSEL", children: children.join(","), caption } })).id
+}
+
+/** container_id while carousel items are still processing: "children:<id>,<id>…" */
+export const CHILDREN_PREFIX = "children:"
+
 export async function publishContainer(token: string, creationId: string): Promise<{ mediaId: string; permalink: string | null }> {
   const { id: mediaId } = await graph(token, "me/media_publish", { method: "POST", body: { creation_id: creationId } })
   let permalink: string | null = null

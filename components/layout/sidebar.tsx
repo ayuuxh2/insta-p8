@@ -14,6 +14,7 @@ const NAV = [
   { href: "/dashboard/inbox", label: "Conversas", icon: "/icons/chat.svg" },
   { href: "/dashboard/contacts", label: "Contatos", icon: "/icons/contacts.svg" },
   { href: "/dashboard/agenda", label: "Agenda de posts", icon: "/icons/calendar.svg" },
+  { href: "/dashboard/vitrine", label: "Vitrine (link da bio)", icon: "/icons/store.svg" },
   { href: "/dashboard/files", label: "Arquivos", icon: "/icons/files.svg" },
   { href: "/dashboard/ice-breakers", label: "Iniciadores de conversa", icon: "/icons/squads.svg" },
   { href: "/dashboard/analytics", label: "Métricas", icon: "/icons/analytics.svg" },

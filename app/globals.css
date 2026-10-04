@@ -262,3 +262,7 @@ body {
 .dashboard-canvas [class*="bg-black/"] {
   background-color: #0a0a0a !important;
 }
+
+/* Horizontal chip rows without a visible scrollbar (vitrine). */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

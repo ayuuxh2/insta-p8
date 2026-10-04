@@ -14,6 +14,9 @@
 // }
 // Defaults: reel → out/reel.mp4 + cover out/capa.jpg · carousel → out/slide-N.jpg · story → "media" is required.
 // Caption and DM rule come from <dir>/post.json (same format as carrossel/kit/publish.mjs; "post" overrides the file).
+// For several products in one post (combo), post.json may have "links": [{ "title": "🦖 Dinossauro", "url": "https://…" }]
+// instead of "link": every line goes in the DM, below dmMessage.
+// carousel default media: out/slide-N.jpg and out/slide-N.mp4 (combos mix images and videos).
 // Feed posts get a comment rule; Stories get a reply rule with the same keyword ("rule": false disables it).
 // Already scheduled entries (agenda.result.json) are skipped, so the script can be run again after a fix.
 
@@ -36,9 +39,11 @@ function ruleBody(post, kind) {
   return {
     name: `${post.ruleName || post.keywords?.[0] || "Post"} (${KIND_NAMES[kind]})`,
     keywords: post.keywords,
-    message: post.dmMessage,
+    message: Array.isArray(post.links) && post.links.length
+      ? `${post.dmMessage}\n\n${post.links.map((l) => `${l.title}: ${l.url}`).join("\n")}`
+      : post.dmMessage,
     messageVariants: post.messageVariants,
-    link: post.link,
+    link: Array.isArray(post.links) && post.links.length ? undefined : post.link,
     tags: post.tags,
     checkFollow: post.checkFollow !== false,
     publicReplies: post.publicReplies,
@@ -68,7 +73,7 @@ for (const [i, entry] of (agenda.posts || []).entries()) {
   let cover = entry.cover
   if (!media.length && kind === "reel") { media = ["out/reel.mp4"]; cover ??= "out/capa.jpg" }
   if (!media.length && kind === "carousel" && existsSync(path.join(dir, "out"))) {
-    media = readdirSync(path.join(dir, "out")).filter((f) => /^slide-\d+\.jpg$/.test(f)).sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0])).map((f) => `out/${f}`)
+    media = readdirSync(path.join(dir, "out")).filter((f) => /^slide-\d+\.(jpg|mp4)$/.test(f)).sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0])).map((f) => `out/${f}`)
   }
   if (!media.length) { problems.push(`${where}: sem mídia (informe "media")`); continue }
   const files = media.map((m) => path.join(dir, m))
@@ -79,7 +84,7 @@ for (const [i, entry] of (agenda.posts || []).entries()) {
     if (statSync(f).size > 50 * 1024 * 1024) problems.push(`${where}: ${path.basename(f)} passa de 50 MB`)
     if (/\.mp4$/i.test(f)) {
       const secs = mediaDuration(f)
-      if (secs < 3 || secs > (kind === "story" ? 60 : 90)) problems.push(`${where}: vídeo com ${secs.toFixed(0)}s (Story até 60s, Reel até 90s)`)
+      if (secs < 3 || secs > (kind === "reel" ? 90 : 60)) problems.push(`${where}: vídeo com ${secs.toFixed(0)}s (Reel até 90s; Story e carrossel até 60s)`)
     }
   }
   if (kind === "reel" && !/\.mp4$/i.test(media[0])) problems.push(`${where}: Reel precisa de .mp4`)
@@ -96,7 +101,10 @@ for (const [i, entry] of (agenda.posts || []).entries()) {
     else {
       if (!post.dmMessage) problems.push(`${where}: dmMessage vazio`)
       if (!post.keywords?.length && !(post.anyComment && kind !== "story")) problems.push(`${where}: keywords vazio`)
-      if (!post.link || !/^https?:\/\//.test(post.link)) problems.push(`${where}: link inválido`)
+      const urls = Array.isArray(post.links) && post.links.length ? post.links.map((l) => l.url) : [post.link]
+      if (urls.some((u) => !u || !/^https?:\/\//.test(u))) problems.push(`${where}: link inválido`)
+      if (Array.isArray(post.links) && post.links.some((l) => !l.title)) problems.push(`${where}: todo link do combo precisa de título`)
+      if ((ruleBody(post, kind).message || "").length > 950) problems.push(`${where}: mensagem da DM passa de 950 caracteres`)
       const kw = post.keywords?.[0]?.toLowerCase()
       if (kw && kind !== "story" && !post.caption?.toLowerCase().includes(kw)) problems.push(`${where}: a legenda não menciona "${post.keywords[0]}"`)
       rule = ruleBody(post, kind)

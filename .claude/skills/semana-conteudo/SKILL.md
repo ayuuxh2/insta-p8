@@ -16,6 +16,8 @@ Ferramentas (pasta `conteudo/kit/`, documentação no topo de cada arquivo):
 | `reel.mjs <pasta>` | `reel.json` → `out/reel.mp4` (9:16, narração pt-BR, legenda palavra a palavra) + `out/capa.jpg` |
 | `story.mjs <pasta>` | `stories.json` → `out/story-N.jpg` |
 | `carrossel/kit/build.mjs <pasta>` | `carrossel.json` → `out/slide-N.jpg` (mesmo kit do /novo-post-produto) |
+| `combo.mjs <pasta>` | `combo.json` → carrossel "combo": capa + Reels prontos em 4:5 + chamada (`out/slide-N.jpg/.mp4`) |
+| `vitrine.mjs <semana> [--check | --listar]` | `vitrine.json` → produtos na página pública `/links` (link da bio), numerados |
 | `previa.mjs <semana>` | `previa/dia-AAAA-MM-DD.jpg` (miniaturas por dia, para aprovação) |
 | `agendar.mjs <semana> [--check]` | valida, envia e coloca na fila (`agenda.json`) |
 | `agenda.mjs [--cancelar <id> \| --cancelar-lote <lote>]` | mostra/cancela a fila |
@@ -54,6 +56,15 @@ Com 3–5 produtos: cada produto rende **3 Reels com ângulos diferentes** (mesm
 2. **Demonstração / benefícios** ("3 coisas que esse termômetro faz")
 3. **Série / curiosidade / contraste** ("Da série: coisas que eu deveria ter comprado antes", "Achadinho de
    churrasqueiro que ninguém te conta")
+
+**Combo por categoria** (1 ou 2 por semana, às 18h num dia sem carrossel): capa com gancho da série +
+o `-r1` de cada produto da categoria (2 a 8) + "Comente COMBO que eu te mando todos os links". `post.json` do combo
+usa `links: [{ title: "🦖 Nome", url }]` no lugar de `link` (vai tudo numa DM só; mensagem ≤ 800 caracteres) e a
+legenda lista os produtos com o número da vitrine ("— nº 4").
+
+**Vitrine (link da bio):** todo produto da semana vai para `vitrine.json` (título curto, categoria, emoji, link,
+foto própria ou do vendedor — nunca da Amazon, `affiliate`). Rode `vitrine.mjs` **antes** de escrever as legendas
+dos combos para saber os números (`--listar`).
 
 ## 3. Pastas por item
 
@@ -100,6 +111,8 @@ Abra cada Story e slide.
 ## 5. Aprovação (uma vez por semana)
 
 ```bash
+node conteudo/kit/combo.mjs conteudo/semanas/<semana>/<combo>       # depois dos Reels
+node conteudo/kit/vitrine.mjs conteudo/semanas/<semana> --check
 node conteudo/kit/previa.mjs conteudo/semanas/<semana>
 node conteudo/kit/agendar.mjs conteudo/semanas/<semana> --check
 ```
@@ -110,6 +123,7 @@ quantos posts por dia, produtos, palavras-chave e os ganchos dos Reels. Pergunte
 ## 6. Agendar
 
 ```bash
+node conteudo/kit/vitrine.mjs conteudo/semanas/<semana>
 node conteudo/kit/agendar.mjs conteudo/semanas/<semana>
 node conteudo/kit/agenda.mjs
 ```
