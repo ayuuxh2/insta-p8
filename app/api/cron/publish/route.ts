@@ -28,6 +28,7 @@ type Row = {
   user_id: number
   kind: PostKind
   label: string
+  batch: string
   media_paths: string[]
   cover_path: string | null
   caption: string
@@ -54,6 +55,25 @@ export async function GET(request: NextRequest) {
   const tokenOf = new Map<number, string>((users || []).filter((u: any) => u.access_token).map((u: any) => [u.id, u.access_token]))
 
   const update = (id: string, fields: Record<string, unknown>) => db.from("scheduled_posts").update({ ...fields, updated_at: now() }).eq("id", id)
+
+  // Links of a post's products. A post without a rule (e.g. the question Story, which already talks
+  // about the product) borrows them from the items of the same folder in the same batch — the label
+  // is "<kind> · <folder>[ · <file>]" (conteudo/kit/agendar.mjs) — so the product shows on the vitrine
+  // as soon as anything about it is published.
+  async function vitrineUrls(row: Row): Promise<string[]> {
+    const ruleUrls = (rule: any) => (rule ? [rule.link, ...(String(rule.message || "").match(/https?:\/\/[^\s<>"']+/g) || [])] : [])
+    if (row.rule) return ruleUrls(row.rule)
+    const folder = row.label.split(" · ")[1]
+    if (!folder || !row.batch) return []
+    const { data } = await db
+      .from("scheduled_posts")
+      .select("label, rule")
+      .eq("user_id", row.user_id)
+      .eq("batch", row.batch)
+      .not("rule", "is", null)
+      .neq("status", "canceled")
+    return (data || []).filter((r: any) => String(r.label).split(" · ")[1] === folder).flatMap((r: any) => ruleUrls(r.rule))
+  }
 
   async function fail(row: Row, message: string, retry: boolean) {
     const attempts = row.attempts + 1
@@ -107,14 +127,11 @@ export async function GET(request: NextRequest) {
       processing_since: null,
     })
     // Products of this post appear on the vitrine (link da bio) only now that the post is live.
-    if (row.rule) {
-      const urls = [row.rule.link, ...(String(row.rule.message || "").match(/https?:\/\/[^\s<>"']+/g) || [])]
-      try {
-        const shown = await releaseVitrineItems(db, row.user_id, urls)
-        if (shown.length) log.push(`vitrine: nº ${shown.join(", ")} liberado(s)`)
-      } catch (e: any) {
-        log.push(`vitrine: falha ao liberar (${e?.message})`)
-      }
+    try {
+      const shown = await releaseVitrineItems(db, row.user_id, await vitrineUrls(row))
+      if (shown.length) log.push(`vitrine: nº ${shown.join(", ")} liberado(s)`)
+    } catch (e: any) {
+      log.push(`vitrine: falha ao liberar (${e?.message})`)
     }
     // Instagram keeps its own copy; the uploaded files are no longer needed.
     const files = [...row.media_paths, ...(row.cover_path ? [row.cover_path] : [])]
