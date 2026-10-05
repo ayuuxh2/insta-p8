@@ -51,11 +51,12 @@ export async function createTrackedLink(db: Db, ctx: LinkContext, target: { url?
 
 // Amazon Associates policy (BR, items v/w) forbids redirects or shorteners that hide that an
 // affiliate link goes to Amazon or obscure where the click came from. Affiliate links (with a
-// tag= parameter) and Amazon's short links (amzn.to/a.co may carry a tag) are sent untouched;
+// tag= parameter) and Amazon's short links (amzn.to, a.co, link.amazon/amzlinks.in from the app's
+// share button — they may carry a tag) are sent untouched;
 // their clicks show up in the Associates reports. Plain Amazon links without a tag (the store's
 // own listings) are not affiliate links, so they are tracked like any other link.
 const AMAZON_HOSTS = /(^|\.)(amazon\.com\.br|amazon\.com|amzn\.com)$/i
-const AMAZON_SHORT_HOSTS = /(^|\.)(amzn\.to|a\.co)$/i
+const AMAZON_SHORT_HOSTS = /(^|\.)(amzn\.to|a\.co|link\.amazon|amzlinks\.in)$/i
 
 export function isAmazonAffiliateLink(url: string): boolean {
   try {
