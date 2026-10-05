@@ -7,6 +7,7 @@
 //   "batch": "2026-10-06",
 //   "posts": [
 //     { "when": "2026-10-06 12:00", "kind": "reel",     "dir": "termometro" },
+//     { "when": "2026-10-07 12:00", "kind": "reel",     "dir": "termometro-r2", "trial": true },
 //     { "when": "2026-10-06 08:30", "kind": "story",    "dir": "termometro", "media": "out/story-1.jpg", "rule": false },
 //     { "when": "2026-10-06 20:00", "kind": "story",    "dir": "termometro", "media": "out/reel.mp4" },
 //     { "when": "2026-10-07 18:00", "kind": "carousel", "dir": "termometro-carrossel" }
@@ -18,6 +19,8 @@
 // instead of "link": every line goes in the DM, below dmMessage.
 // carousel default media: out/slide-N.jpg and out/slide-N.mp4 (combos mix images and videos).
 // Feed posts get a comment rule; Stories get a reply rule with the same keyword ("rule": false disables it).
+// "trial": true (Reel only) = Reel de teste: shown only to non-followers; Instagram shares it with followers
+// automatically if it performs well. It does not show on the profile grid until then.
 // Already scheduled entries (agenda.result.json) are skipped, so the script can be run again after a fix.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
@@ -110,8 +113,10 @@ for (const [i, entry] of (agenda.posts || []).entries()) {
       rule = ruleBody(post, kind)
     }
   }
-  const label = entry.label || `${KIND_NAMES[kind]} · ${entry.dir}${kind === "story" ? ` · ${path.basename(media[0])}` : ""}`
-  items.push({ key, kind, when, label, files, coverFile: kind === "reel" ? coverFile : null, caption: kind === "story" ? "" : post?.caption || "", rule })
+  const trial = entry.trial === true
+  if (trial && kind !== "reel") problems.push(`${where}: só Reel pode ser de teste ("trial")`)
+  const label = entry.label || `${KIND_NAMES[kind]}${trial ? " (teste)" : ""} · ${entry.dir}${kind === "story" ? ` · ${path.basename(media[0])}` : ""}`
+  items.push({ key, kind, when, label, files, coverFile: kind === "reel" ? coverFile : null, caption: kind === "story" ? "" : post?.caption || "", rule, trial })
 }
 
 items.sort((a, b) => a.when - b.when)
@@ -157,7 +162,7 @@ for (const it of items) {
   const coverPath = it.coverFile ? await upload(it.coverFile) : undefined
   const { item } = await api("schedule", {
     method: "POST",
-    body: JSON.stringify({ kind: it.kind, scheduledAt: it.when.toISOString(), paths, coverPath, caption: it.caption, label: it.label, batch, rule: it.rule }),
+    body: JSON.stringify({ kind: it.kind, scheduledAt: it.when.toISOString(), paths, coverPath, caption: it.caption, label: it.label, batch, rule: it.rule, ...(it.trial ? { trial: true } : {}) }),
   })
   done[it.key] = item.id
   writeFileSync(resultFile, JSON.stringify(done, null, 2))

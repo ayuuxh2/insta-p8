@@ -70,6 +70,7 @@ ordem os arquivos de `migrations/` que ainda não foram aplicados (todos podem s
 4. `006_etapa7_registro.sql`
 5. `007_agenda_publicacoes.sql`
 6. `008_agendador_pg_cron.sql` (troque `<CRON_SECRET>` antes de rodar)
+7. `009_reels_de_teste.sql`
 
 ## Conteúdo automático (Reels, Stories, carrosséis)
 

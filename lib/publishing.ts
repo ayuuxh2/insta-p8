@@ -51,11 +51,15 @@ export async function waitFinished(token: string, containerId: string, tries = 1
 /**
  * Creates the media container. Photos and carousel items are waited for here (seconds);
  * Reels and video Stories keep processing on Instagram's side and are checked later.
+ * trial: Reel de teste (Trial Reel) — shown only to non-followers; Instagram shares it with followers
+ * automatically if it performs well (SS_PERFORMANCE).
  */
-export async function createContainer(token: string, kind: PostKind, urls: string[], caption: string, coverUrl?: string | null): Promise<string> {
+export async function createContainer(token: string, kind: PostKind, urls: string[], caption: string, coverUrl?: string | null, trial = false): Promise<string> {
   if (!urls.length) throw new Error("Nenhuma mídia")
   if (kind === "reel") {
-    const body: Record<string, unknown> = { media_type: "REELS", video_url: urls[0], caption, share_to_feed: true }
+    const body: Record<string, unknown> = { media_type: "REELS", video_url: urls[0], caption }
+    if (trial) body.trial_params = { graduation_strategy: "SS_PERFORMANCE" }
+    else body.share_to_feed = true
     if (coverUrl) body.cover_url = coverUrl
     return (await graph(token, "me/media", { method: "POST", body })).id
   }

@@ -13,6 +13,7 @@ Funciona sozinho, 24 horas por dia:
 |---|---|
 | Alguém comenta a palavra no post → recebe o cartão "Quero receber" na DM → o sistema confere se segue a @cee_webstore → manda o link | Painel → **Respostas automáticas** |
 | Publica sozinho os Reels, Stories e carrosséis agendados, nos horários, e cria a regra de DM de cada um | Painel → **Agenda de posts** |
+| Publica parte dos Reels como **Reel de teste**: só quem não segue vê; se for bem, o Instagram mostra aos seguidores sozinho | Aparece como "Reel (teste)" na agenda |
 | Página de links para a bio, com todos os produtos numerados | https://cee-automacao.vercel.app/links · Painel → **Vitrine** |
 | Conversas, contatos, cliques, métricas | Painel → Conversas / Contatos / Métricas |
 | Avisa se a conexão com o Instagram cair ou se a agenda parar | Alerta no celular/e-mail |
@@ -68,6 +69,13 @@ Chat novo → `/novo-post-produto <link>` + fotos + "é meu" ou "é afiliado". C
 - Comente a palavra-chave com uma conta que **não segue** a loja: deve pedir para seguir antes do link.
 - Abra https://cee-automacao.vercel.app/links e veja se o produto apareceu.
 
+### Reels de teste
+
+Cada produto rende 3 Reels com ganchos diferentes. O 1º sai normal (perfil + seguidores); o 2º e o 3º saem como
+**Reel de teste**: o Instagram mostra só para quem **não segue**. Se o Reel for bem, ele é mostrado aos seguidores
+automaticamente. Quem não segue e comenta a palavra cai na trava "siga para receber o link", então o teste também
+traz seguidores. Reel de teste não aparece no perfil até ser promovido.
+
 ## 4. Regras que valem sempre
 
 - **Afiliado = avisar na legenda** ("Link de afiliado: posso receber comissão por compras feitas pelo link").
@@ -104,5 +112,6 @@ As mudanças de código ficam num "pedido" no GitHub. Para elas entrarem no ar: 
 | 04/10 | `/semana-conteudo`: Reels narrados, Stories, agenda automática (Supabase a cada 5 min) |
 | 04/10 | Vitrine (link da bio), combos por categoria, carrossel com vídeos |
 | 05/10 | Posts do termômetro (PONTO) e do kit alicate (ALICATE); `link.amazon` reconhecido como afiliado; produto entra na Vitrine já no primeiro Story |
+| 05/10 | Reels de teste (só para quem não segue, promoção automática) na `/semana-conteudo` |
 
 Detalhes técnicos: `README.md`.
