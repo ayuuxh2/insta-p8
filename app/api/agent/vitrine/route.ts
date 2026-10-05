@@ -3,7 +3,8 @@ import { agentUser, isAgentAuthorized, unauthorized } from "@/lib/agent"
 import { loadVitrine, upsertVitrineItems } from "@/lib/vitrine"
 
 // Vitrine (link da bio) for automation agents.
-// POST /api/agent/vitrine { items: [{ title, category, emoji?, link, imagePath?, affiliate? }] }
+// POST /api/agent/vitrine { items: [{ title, category, emoji?, link, imagePath?, affiliate?, pending? }] }
+//   New products stay hidden (pending) until a post with their link is published, unless pending: false.
 //   → adds or updates products (matched by link); returns their numbers.
 //   imagePath: a JPEG uploaded with /api/agent/upload-url.
 // GET /api/agent/vitrine → all products.

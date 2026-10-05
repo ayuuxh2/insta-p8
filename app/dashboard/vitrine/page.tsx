@@ -14,6 +14,7 @@ type Item = {
   link: string
   imagePath?: string | null
   hidden?: boolean
+  pending?: boolean
   affiliate?: boolean
   clicks: number | null
 }
@@ -63,8 +64,8 @@ export default function VitrinePage() {
     <header className="mb-8">
       <h1 className="text-2xl font-semibold tracking-tight">Vitrine (link da bio)</h1>
       <p className="mt-1.5 text-sm text-muted-foreground">
-        Página pública com todos os produtos dos posts, numerados e separados por categoria. Os produtos entram sozinhos quando
-        os posts são agendados. Coloque o link abaixo na bio do Instagram.
+        Página pública com todos os produtos dos posts, numerados e separados por categoria. Cada produto aparece na página sozinho quando
+        o primeiro post dele é publicado. Coloque o link abaixo na bio do Instagram.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <code className="rounded-lg bg-muted px-3 py-2 text-sm">{pageUrl}</code>
@@ -79,7 +80,7 @@ export default function VitrinePage() {
       <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">Nenhum produto ainda.</div>
     ) : (
       <ul className="divide-y divide-border rounded-xl border border-border">
-        {items.map(item => <li key={item.number} className={cn("flex items-center gap-3 px-4 py-3", item.hidden && "opacity-50")}>
+        {items.map(item => <li key={item.number} className={cn("flex items-center gap-3 px-4 py-3", (item.hidden || item.pending) && "opacity-60")}>
           <span className="w-12 shrink-0 text-sm font-semibold tabular-nums">nº {item.number}</span>
           <div className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
             {item.imagePath && <img src={`/api/vitrine/img/${item.number}`} alt="" loading="lazy" className="size-full object-cover" />}
@@ -87,6 +88,7 @@ export default function VitrinePage() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{item.emoji ? `${item.emoji} ` : ""}{item.title}</p>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {item.pending && <span className="font-medium text-amber-700 dark:text-amber-300">Aguardando o primeiro post · </span>}
               {item.category}{item.affiliate ? " · afiliado" : " · produto próprio"}
               {" · "}{item.clicks === null ? "cliques no painel da Amazon" : `${item.clicks} clique${item.clicks === 1 ? "" : "s"}`}
             </p>

@@ -19,6 +19,8 @@ export type VitrineItem = {
   /** Storage path of the product image (inside the private bucket). */
   imagePath?: string | null
   hidden?: boolean
+  /** Waiting for its first post: stays off the page until a post with its link is published. */
+  pending?: boolean
   affiliate?: boolean
   createdAt: string
   updatedAt: string
@@ -60,7 +62,7 @@ const clean = (v: unknown, max: number) => (typeof v === "string" ? v.trim().sli
 export async function upsertVitrineItems(
   db: Db,
   userId: number | string,
-  input: Array<{ title: string; category: string; emoji?: string; link: string; imagePath?: string | null; affiliate?: boolean }>,
+  input: Array<{ title: string; category: string; emoji?: string; link: string; imagePath?: string | null; affiliate?: boolean; pending?: boolean }>,
 ) {
   const vitrine = await loadVitrine(db, userId)
   const now = new Date().toISOString()
@@ -74,7 +76,7 @@ export async function upsertVitrineItems(
     if (!item) {
       const number = vitrine.items.reduce((max, i) => Math.max(max, i.number), 0) + 1
       const shortUrl = canTrack(link) ? await createTrackedLink(db, { userId }, { url: link }) : null
-      item = { number, title, category, link, shortCode: shortUrl?.split("/r/")[1] || null, createdAt: now, updatedAt: now }
+      item = { number, title, category, link, shortCode: shortUrl?.split("/r/")[1] || null, pending: raw.pending !== false, createdAt: now, updatedAt: now }
       vitrine.items.push(item)
     }
     item.title = title
@@ -82,6 +84,7 @@ export async function upsertVitrineItems(
     item.emoji = clean(raw.emoji, 8) || item.emoji
     if (raw.imagePath) item.imagePath = raw.imagePath
     if (typeof raw.affiliate === "boolean") item.affiliate = raw.affiliate
+    if (typeof raw.pending === "boolean") item.pending = raw.pending
     item.updatedAt = now
     result.push(item)
   }
@@ -89,12 +92,31 @@ export async function upsertVitrineItems(
   return result
 }
 
+/**
+ * Shows the products whose link went out in a published post (called by the publishing queue).
+ * Returns the numbers that became visible.
+ */
+export async function releaseVitrineItems(db: Db, userId: number | string, urls: string[]) {
+  const wanted = new Set(urls.filter(Boolean))
+  if (!wanted.size) return []
+  const vitrine = await loadVitrine(db, userId)
+  const released = vitrine.items.filter((i) => i.pending && wanted.has(i.link))
+  if (!released.length) return []
+  const now = new Date().toISOString()
+  for (const i of released) {
+    i.pending = false
+    i.updatedAt = now
+  }
+  await saveVitrine(db, userId, vitrine)
+  return released.map((i) => i.number)
+}
+
 /** Link used on the public page (relative, so it works on any domain the page is served from). */
 export const vitrineHref = (item: VitrineItem) => (item.shortCode ? `/r/${item.shortCode}` : item.link)
 
 /** Visible items grouped by category, newest first inside each category. */
 export function groupVitrine(items: VitrineItem[]) {
-  const visible = items.filter((i) => !i.hidden)
+  const visible = items.filter((i) => !i.hidden && !i.pending)
   const categories = [...new Set(visible.map((i) => i.category))].sort((a, b) => {
     const ia = CATEGORY_ORDER.indexOf(a)
     const ib = CATEGORY_ORDER.indexOf(b)

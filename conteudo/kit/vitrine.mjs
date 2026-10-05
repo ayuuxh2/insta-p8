@@ -56,6 +56,7 @@ for (const p of list) {
     emoji: p.emoji,
     link: p.link,
     affiliate: p.affiliate === true,
+    pending: p.pending === false ? false : undefined,
     imagePath: p.image ? await uploadImage(path.join(week, p.image)) : undefined,
   })
 }

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
 import { FILES_BUCKET } from "@/lib/files"
 import { sendAlert } from "@/lib/notify"
+import { releaseVitrineItems } from "@/lib/vitrine"
 import { CHILDREN_PREFIX, PUBLISH_HEARTBEAT, containerStatus, createCarouselChildren, createCarouselParent, createContainer, createPostRule, publishContainer, type PostKind } from "@/lib/publishing"
 
 // Publishes the scheduled queue (scheduled_posts). Called every 5 minutes by Supabase pg_cron
@@ -105,6 +106,16 @@ export async function GET(request: NextRequest) {
       published_at: now(),
       processing_since: null,
     })
+    // Products of this post appear on the vitrine (link da bio) only now that the post is live.
+    if (row.rule) {
+      const urls = [row.rule.link, ...(String(row.rule.message || "").match(/https?:\/\/[^\s<>"']+/g) || [])]
+      try {
+        const shown = await releaseVitrineItems(db, row.user_id, urls)
+        if (shown.length) log.push(`vitrine: nº ${shown.join(", ")} liberado(s)`)
+      } catch (e: any) {
+        log.push(`vitrine: falha ao liberar (${e?.message})`)
+      }
+    }
     // Instagram keeps its own copy; the uploaded files are no longer needed.
     const files = [...row.media_paths, ...(row.cover_path ? [row.cover_path] : [])]
     if (files.length) await db.storage.from(FILES_BUCKET).remove(files)
