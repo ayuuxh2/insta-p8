@@ -28,12 +28,14 @@ JPG com `sharp` se precisar).
   (preço muda; na legenda use "confira o preço no link").
 - **Produto próprio ou de afiliado?** A CEE Store vende produtos próprios na Amazon (ex.: termômetro culinário,
   chave hidráulica 8 em 1, misturador para furadeira) e também divulga produtos como afiliada. Se não for óbvio,
-  pergunte. Sinais de afiliado: `tag=` no link da Amazon, `amzn.to`, `s.shopee`, `mercadolivre.com/sec`.
+  pergunte. Sinais de afiliado: `tag=` no link da Amazon, `amzn.to`, `link.amazon`, `s.shopee`, `mercadolivre.com/sec`.
 - **Link de afiliado: sempre identifique na legenda**, ex.: "Link de afiliado: posso receber comissão por compras
   feitas pelo link" (Amazon Associados exige; o CONAR também). Produto próprio não leva tag nem esse aviso.
 - O sistema envia links de afiliado da Amazon (com `tag=`) e links `amzn.to` **sem** o encurtador `/r/` (a política
   da Amazon proíbe esconder o destino); os cliques aparecem no painel de Associados. Links da Amazon sem tag
   (produtos próprios) e das outras lojas são rastreados normalmente.
+- **Produto de afiliado da Amazon: não use as fotos do anúncio da Amazon** (a licença de Associados não permite).
+  Peça fotos do usuário ou do vendedor no Mercado Livre/Shopee. Se o usuário insistir, avise o risco antes.
 
 ## 2. Analisar as fotos
 
@@ -110,3 +112,18 @@ O script envia os slides, publica o carrossel com a legenda e cria a regra (come
 → só seguidores → link). Informe ao usuário o link do post (`result.json`) e o nome da regra, e sugira testar comentando
 a palavra com uma conta que não segue a loja. Se a publicação falhar no meio, diga exatamente o que já foi feito
 (o post pode ter sido publicado sem a regra — nesse caso a regra pode ser criada no painel, no post certo).
+
+## 7. Vitrine (link da bio)
+
+Coloque o produto na página pública `/links`. Crie `carrossel/posts/<pasta>/vitrine.json` (formato no topo de
+`conteudo/kit/vitrine.mjs`): título curto, categoria (`Brinquedos`, `Ferramentas`, `Casa`, `Cozinha`, `Carro` ou
+`Outros`), emoji, o mesmo link do post, `affiliate`, `"pending": false` (o post já saiu) e `image` com uma foto que
+possa ser usada (nunca da Amazon para afiliado; sem foto aparece o emoji). Antes, rode `--listar` para não duplicar
+um produto já cadastrado (o link é a chave).
+
+```bash
+node conteudo/kit/vitrine.mjs --listar
+node conteudo/kit/vitrine.mjs carrossel/posts/<pasta>
+```
+
+Informe o número do produto na vitrine (https://cee-automacao.vercel.app/links).
