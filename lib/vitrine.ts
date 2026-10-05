@@ -112,7 +112,8 @@ export async function releaseVitrineItems(db: Db, userId: number | string, urls:
 }
 
 /** Link used on the public page (relative, so it works on any domain the page is served from). */
-export const vitrineHref = (item: VitrineItem) => (item.shortCode ? `/r/${item.shortCode}` : item.link)
+// Rechecks canTrack: a short code stored before a link became untrackable is not used.
+export const vitrineHref = (item: VitrineItem) => (item.shortCode && canTrack(item.link) ? `/r/${item.shortCode}` : item.link)
 
 /** Visible items grouped by category, newest first inside each category. */
 export function groupVitrine(items: VitrineItem[]) {
