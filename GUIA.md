@@ -69,9 +69,22 @@ Chat novo → `/novo-post-produto <link>` + fotos + "é meu" ou "é afiliado". C
 - Comente a palavra-chave com uma conta que **não segue** a loja: deve pedir para seguir antes do link.
 - Abra https://cee-automacao.vercel.app/links e veja se o produto apareceu.
 
+### Os 5 Reels de cada produto
+
+| Reel | Formato | Como sai |
+|---|---|---|
+| 1º | Problema → solução | Normal |
+| 2º | Demonstração / benefícios | Teste |
+| 3º | Série / curiosidade | Teste |
+| 4º | **Passo a passo** ("Passo 1, 2, 3") | Teste |
+| 5º | **Perguntas e respostas** (só dúvidas que o anúncio responde) | Teste |
+
+São 3 Reels por dia (12:00, 17:00 e 19:30). Com 5 produtos não cabe tudo: o Claude usa um 4º horário (09:30) ou
+deixa os que sobrarem para a semana seguinte, e avisa na prévia.
+
 ### Reels de teste
 
-Cada produto rende 3 Reels com ganchos diferentes. O 1º sai normal (perfil + seguidores); o 2º e o 3º saem como
+O 1º Reel de cada produto sai normal (perfil + seguidores); do 2º ao 5º saem como
 **Reel de teste**: o Instagram mostra só para quem **não segue**. Se o Reel for bem, ele é mostrado aos seguidores
 automaticamente. Quem não segue e comenta a palavra cai na trava "siga para receber o link", então o teste também
 traz seguidores. Reel de teste não aparece no perfil até ser promovido.
@@ -113,5 +126,6 @@ As mudanças de código ficam num "pedido" no GitHub. Para elas entrarem no ar: 
 | 04/10 | Vitrine (link da bio), combos por categoria, carrossel com vídeos |
 | 05/10 | Posts do termômetro (PONTO) e do kit alicate (ALICATE); `link.amazon` reconhecido como afiliado; produto entra na Vitrine já no primeiro Story |
 | 05/10 | Reels de teste (só para quem não segue, promoção automática) na `/semana-conteudo` |
+| 05/10 | Mais 2 Reels por produto: passo a passo e perguntas e respostas |
 
 Detalhes técnicos: `README.md`.
