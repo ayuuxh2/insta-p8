@@ -29,6 +29,8 @@ type Row = {
   kind: PostKind
   label: string
   batch: string
+  /** Missing until migrations/009 runs. */
+  trial?: boolean
   media_paths: string[]
   cover_path: string | null
   caption: string
@@ -238,7 +240,7 @@ export async function GET(request: NextRequest) {
       const containerId =
         row.kind === "carousel"
           ? CHILDREN_PREFIX + (await createCarouselChildren(token, urls)).join(",")
-          : await createContainer(token, row.kind, urls, row.caption, coverUrl)
+          : await createContainer(token, row.kind, urls, row.caption, coverUrl, row.trial === true)
       await update(row.id, { container_id: containerId })
       const fresh = { ...row, container_id: containerId }
       if (!(await check(fresh))) waiting.push(fresh)

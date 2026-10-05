@@ -7,9 +7,10 @@ import { POST_KINDS, isVideo, ruleProblem, type PostKind } from "@/lib/publishin
 //
 // POST /api/agent/schedule
 //   { kind: "reel" | "carousel" | "image" | "story", scheduledAt: ISO date, paths: string[], coverPath?,
-//     caption?, label?, batch?, rule?: { …same fields as /api/agent/rules } }
+//     caption?, label?, batch?, rule?: { …same fields as /api/agent/rules }, trial? }
 //   reel: 1 MP4 (+ optional JPEG cover) · story: 1 JPEG or MP4 · image: 1 JPEG · carousel: 2–10 JPEG/MP4
 //   For a story, the rule answers replies to the Story; otherwise it answers comments.
+//   trial: true (reel only) → Reel de teste, shown to non-followers first (migrations/009).
 // GET /api/agent/schedule?from=ISO — upcoming and recent items.
 // DELETE /api/agent/schedule?id=… or ?batch=… — cancels items that were not published yet.
 
@@ -37,6 +38,8 @@ export async function POST(request: NextRequest) {
   if (when.getTime() > Date.now() + 60 * 86_400_000) return NextResponse.json({ error: "Agende no máximo 60 dias à frente" }, { status: 400 })
   const problem = kindProblem(kind, paths, cover) || (caption.length > 2200 ? "Legenda acima de 2.200 caracteres" : null) || (body.rule ? ruleProblem(body.rule) : null)
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
+  const trial = body.trial === true
+  if (trial && kind !== "reel") return NextResponse.json({ error: "Só Reel pode ser de teste" }, { status: 400 })
 
   const { db, user } = await agentUser()
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
@@ -56,6 +59,8 @@ export async function POST(request: NextRequest) {
       cover_path: cover || null,
       caption,
       rule: body.rule || null,
+      // Sent only when used, so scheduling keeps working before migrations/009 is applied.
+      ...(trial ? { trial: true } : {}),
     })
     .select("id, kind, label, scheduled_at, status")
     .single()

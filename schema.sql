@@ -612,6 +612,8 @@ CREATE TABLE IF NOT EXISTS public.scheduled_posts (
   caption TEXT NOT NULL DEFAULT '',
   -- Body for the comment/story-reply rule created after publishing (same fields as /api/agent/rules), or null.
   rule JSONB,
+  -- Reel de teste (Trial Reel): only non-followers at first, auto-shared to followers if it performs well.
+  trial BOOLEAN NOT NULL DEFAULT FALSE,
   container_id TEXT,
   media_id TEXT,
   permalink TEXT,

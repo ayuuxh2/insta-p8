@@ -57,6 +57,13 @@ Com 3–5 produtos: cada produto rende **3 Reels com ângulos diferentes** (mesm
 3. **Série / curiosidade / contraste** ("Da série: coisas que eu deveria ter comprado antes", "Achadinho de
    churrasqueiro que ninguém te conta")
 
+**Reels de teste (padrão):** o `-r1` de cada produto sai **normal**; o `-r2` e o `-r3` saem como **Reel de teste**
+(`"trial": true` no `agenda.json`): o Instagram mostra só para quem não segue e, se for bem, passa para os seguidores
+automaticamente. Serve para descobrir qual gancho atrai gente nova sem gastar os seguidores com versões fracas.
+Reel de teste não aparece no perfil até ser promovido, por isso o Story de vídeo (15:00) usa sempre o Reel normal do
+dia ou um que já saiu. Precisa de `migrations/009_reels_de_teste.sql` aplicada (sem ela, o agendamento do item de
+teste falha com erro de coluna `trial`).
+
 **Combo por categoria** (1 ou 2 por semana, às 18h num dia sem carrossel): capa com gancho da série +
 o `-r1` de cada produto da categoria (2 a 8) + "Comente COMBO que eu te mando todos os links". `post.json` do combo
 usa `links: [{ title: "🦖 Nome", url }]` no lugar de `link` (vai tudo numa DM só; mensagem ≤ 800 caracteres) e a
@@ -92,7 +99,8 @@ conteudo/semanas/2026-10-12/
 **`stories.json`** (formato no topo de `story.mjs`): 1 `pergunta` (sem regra, só conversa), 1 `produto`,
 1 `link` por produto. O Story de vídeo usa o próprio `out/reel.mp4`.
 
-**`agenda.json`** (formato no topo de `agendar.mjs`): horário de Brasília. Story `pergunta` com `"rule": false`;
+**`agenda.json`** (formato no topo de `agendar.mjs`): horário de Brasília. Reels `-r2`/`-r3` com `"trial": true`.
+Story `pergunta` com `"rule": false`;
 os outros Stories e posts usam o `post.json` da pasta (Stories viram regra de **resposta ao Story** com a mesma
 palavra). `batch` = data da segunda.
 
@@ -118,7 +126,7 @@ node conteudo/kit/agendar.mjs conteudo/semanas/<semana> --check
 ```
 
 Envie ao usuário (SendUserFile): as imagens de `previa/`, 2 ou 3 Reels de amostra (`out/reel.mp4`) e um resumo:
-quantos posts por dia, produtos, palavras-chave e os ganchos dos Reels. Pergunte se pode agendar.
+quantos posts por dia, produtos, palavras-chave, os ganchos dos Reels e quais saem como teste. Pergunte se pode agendar.
 
 ## 6. Agendar
 
