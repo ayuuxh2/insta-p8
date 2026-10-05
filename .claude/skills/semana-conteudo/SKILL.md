@@ -46,8 +46,9 @@ Pasta: `conteudo/semanas/<AAAA-MM-DD da segunda>/` (fora do git) com `fotos/` (c
 
 ## 2. Grade padrão (conta nova, crescer alcance)
 
-Por dia: **2 Reels** (12:00 e 19:30) e **4 Stories** (08:30 pergunta · 11:00 produto · 15:00 o Reel do meio-dia
-em vídeo · 21:00 "Responda PALAVRA"). **Carrossel** seg/qua/sex às 18:00. ≈ 45 publicações/semana.
+Por dia: **3 Reels** (12:00, 17:00 e 19:30; 09:30 como 4º horário se faltar espaço) e **4 Stories** (08:30 pergunta ·
+11:00 produto · 15:00 o Reel do meio-dia em vídeo · 21:00 "Responda PALAVRA"). **Carrossel** seg/qua/sex às 18:00.
+≈ 50 a 60 publicações/semana.
 Espalhe os produtos para não repetir o mesmo produto em Reels seguidos. Varie os minutos (ex.: 12:07, 19:34)
 para não parecer robô.
 
@@ -57,7 +58,19 @@ Com 3–5 produtos: cada produto rende **3 Reels com ângulos diferentes** (mesm
 3. **Série / curiosidade / contraste** ("Da série: coisas que eu deveria ter comprado antes", "Achadinho de
    churrasqueiro que ninguém te conta")
 
-**Reels de teste (padrão):** o `-r1` de cada produto sai **normal**; o `-r2` e o `-r3` saem como **Reel de teste**
+Além desses três, cada produto ganha mais **2 Reels de formato fixo** (mesma palavra-chave):
+4. **Passo a passo** (`-r4`): gancho "Como usar em 3 passos" + uma cena por passo com `kicker` "Passo 1", "Passo 2",
+   "Passo 3" + CTA. Os passos vêm do anúncio ou do que as fotos mostram; sem isso, troque por outro formato e avise na
+   prévia.
+5. **Perguntas e respostas** (`-r5`): gancho "Respondendo as dúvidas sobre…" + 2 ou 3 pares de cenas, uma com
+   `kicker` "Pergunta" (a dúvida no título, narrada como cliente) e outra com `kicker` "Resposta" (resposta curta) +
+   CTA. Só perguntas cuja resposta está no anúncio ou nas fotos (ex.: "Precisa de pilha?", "Serve pra fritura?",
+   "Vem com estojo?"). Nunca invente resposta; sem 2 perguntas respondíveis, troque por outro formato e avise.
+
+O problema → solução já é o `-r1`. Com 5 produtos (25 Reels) não cabe tudo em 3 horários por dia: use o 4º horário
+(09:30) ou deixe os `-r5` que sobrarem para a semana seguinte, e avise na prévia.
+
+**Reels de teste (padrão):** o `-r1` de cada produto sai **normal**; o `-r2` ao `-r5` saem como **Reel de teste**
 (`"trial": true` no `agenda.json`): o Instagram mostra só para quem não segue e, se for bem, passa para os seguidores
 automaticamente. Serve para descobrir qual gancho atrai gente nova sem gastar os seguidores com versões fracas.
 Reel de teste não aparece no perfil até ser promovido, por isso o Story de vídeo (15:00) usa sempre o Reel normal do
@@ -80,7 +93,7 @@ conteudo/semanas/2026-10-12/
   fotos/
   agenda.json
   termometro-r1/   reel.json  post.json   (+ stories.json no primeiro Reel de cada produto)
-  termometro-r2/   reel.json  post.json
+  termometro-r2/   reel.json  post.json   (… até termometro-r5: passo a passo e perguntas e respostas)
   termometro-c/    carrossel.json  post.json
 ```
 

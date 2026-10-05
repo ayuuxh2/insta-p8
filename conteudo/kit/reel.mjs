@@ -15,7 +15,8 @@
 //     { "type": "cta", "image": "...", "say": "Comente TERMO que eu te mando o link no direct." }
 //   ]
 // }
-// Scene fields: type (hook | point | cta; default point), image, title (*highlight*, \n), say (narration),
+// Scene fields: type (hook | point | cta; default point), image, title (*highlight*, \n), kicker (yellow label above the
+// title, e.g. "Passo 1", "Pergunta", "Resposta"), titleSize, say (narration),
 // focus ("x% y%"), zoom (≥1), fit ("cover" full-bleed | "card" photo card over blurred background; default:
 // cover for portrait photos, card otherwise), motion ("in" | "out"), captions (false to hide them).
 
