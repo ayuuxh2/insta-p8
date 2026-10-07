@@ -45,8 +45,8 @@ const base = (body, { transparent = false, width = W, height = H } = {}) => `<!d
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: ${width}px; height: ${height}px; overflow: hidden; background: ${transparent ? "transparent" : BRAND.navyDeep}; }
-  body { font-family: "Inter", system-ui, sans-serif; color: #fff; position: relative; -webkit-font-smoothing: antialiased; }
-  .display { font-family: "Fraunces", Georgia, serif; font-weight: 900; letter-spacing: -0.02em; line-height: 1.0; }
+  body { font-family: "Nunito", system-ui, sans-serif; color: #fff; position: relative; -webkit-font-smoothing: antialiased; }
+  .display { font-family: "Nunito", system-ui, sans-serif; font-weight: 900; letter-spacing: -0.01em; line-height: 1.05; }
   .hl { color: ${BRAND.accent}; }
 </style></head><body>${body}</body></html>`
 

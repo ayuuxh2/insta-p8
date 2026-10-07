@@ -27,20 +27,17 @@ const rich = (s = "") =>
   esc(s)
     .replace(/\*([\s\S]+?)\*/g, (_, words) => `<span class="hl">${words.replace(/ /g, "&nbsp;")}</span>`)
     .replace(/\n/g, "<br>")
-    // Fraunces only ships old-style figures ("35" reads like "55"): digits use Inter instead.
-    .replace(/(<[^>]*>|&[a-z]+;)|(\d[\d.,]*)/g, (m, tag, num) => (tag ? tag : `<span class="num">${num}</span>`))
 
 function page({ body, background, counter, total, dark }) {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800;9..144,900&family=Inter:wght@400;500;600;700;800&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=block" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 1080px; height: 1350px; overflow: hidden; }
-  body { font-family: "Inter", system-ui, sans-serif; background: ${background}; color: ${dark ? "#fff" : BRAND.ink}; position: relative; -webkit-font-smoothing: antialiased; }
-  .display { font-family: "Fraunces", Georgia, serif; font-weight: 800; letter-spacing: -0.02em; line-height: 0.98; }
-  .num { font-family: "Inter", system-ui, sans-serif; } .display .num { font-weight: 800; letter-spacing: -0.04em; }
+  body { font-family: "Nunito", system-ui, sans-serif; background: ${background}; color: ${dark ? "#fff" : BRAND.ink}; position: relative; -webkit-font-smoothing: antialiased; }
+  .display { font-family: "Nunito", system-ui, sans-serif; font-weight: 900; letter-spacing: -0.01em; line-height: 1.05; }
   .hl { color: ${BRAND.accent}; }
   .light .hl { color: ${BRAND.navy}; background: linear-gradient(transparent 62%, ${BRAND.accent} 62%, ${BRAND.accent} 92%, transparent 92%); padding: 0 6px; }
   .counter { position: absolute; top: 56px; right: 64px; font-size: 26px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.75; }

@@ -34,8 +34,8 @@ const page = (body, background = BRAND.navyDeep) => `<!doctype html><html lang="
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 1080px; height: 1920px; overflow: hidden; }
-  body { font-family: "Inter", system-ui, sans-serif; background: ${background}; color: #fff; position: relative; -webkit-font-smoothing: antialiased; }
-  .display { font-family: "Fraunces", Georgia, serif; font-weight: 900; letter-spacing: -0.02em; line-height: 1.0; }
+  body { font-family: "Nunito", system-ui, sans-serif; background: ${background}; color: #fff; position: relative; -webkit-font-smoothing: antialiased; }
+  .display { font-family: "Nunito", system-ui, sans-serif; font-weight: 900; letter-spacing: -0.01em; line-height: 1.05; }
   .hl { color: ${BRAND.accent}; }
   .kicker { display: inline-block; padding: 14px 28px; border-radius: 999px; background: ${BRAND.accent}; color: ${BRAND.navyDeep}; font-size: 32px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
   .reply { position: absolute; left: 70px; right: 70px; bottom: 330px; padding: 34px 40px; border-radius: 36px; background: rgba(255,255,255,0.96); color: ${BRAND.navyDeep}; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }

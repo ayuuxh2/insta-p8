@@ -31,11 +31,9 @@ export const rich = (s = "") =>
   esc(s)
     .replace(/\*([\s\S]+?)\*/g, (_, words) => `<span class="hl">${words.replace(/ /g, "&nbsp;")}</span>`)
     .replace(/\n/g, "<br>")
-    // Fraunces only ships old-style figures ("35" reads like "55"): digits use Inter instead.
-    .replace(/(<[^>]*>|&[a-z]+;)|(\d[\d.,]*)/g, (m, tag, num) => (tag ? tag : `<span class="num">${num}</span>`))
 
 
-export const FONTS = `<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,800;9..144,900&family=Inter:wght@500;600;700;800;900&display=block" rel="stylesheet"><style>.num { font-family: "Inter", system-ui, sans-serif; } .display .num { font-weight: 800; letter-spacing: -0.04em; }</style>`
+export const FONTS = `<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=block" rel="stylesheet">`
 
 export function resetDir(dir) {
   if (existsSync(dir)) rmSync(dir, { recursive: true })
