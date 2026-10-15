@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   }
   if (caption.length > 2200) return NextResponse.json({ error: "Legenda acima de 2.200 caracteres" }, { status: 400 })
 
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user?.access_token) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
   if (paths.some((p: string) => typeof p !== "string" || !p.startsWith(`${user.id}/posts/`) || !/\.jpe?g$/i.test(p))) {
     return NextResponse.json({ error: "Caminho de imagem inválido" }, { status: 400 })

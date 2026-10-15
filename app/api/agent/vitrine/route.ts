@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
   const { items } = await request.json().catch(() => ({}))
   if (!Array.isArray(items) || !items.length || items.length > 50) return NextResponse.json({ error: "Envie de 1 a 50 produtos" }, { status: 400 })
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
   if (items.some((i: any) => i.imagePath && !String(i.imagePath).startsWith(`${user.id}/posts/`))) {
     return NextResponse.json({ error: "Caminho de imagem inválido (use /api/agent/upload-url)" }, { status: 400 })
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
   return NextResponse.json({ ok: true, ...(await loadVitrine(db, user.id)) })
 }

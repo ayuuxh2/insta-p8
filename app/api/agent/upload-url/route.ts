@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Envie imagens .jpg ou vídeos .mp4 (formatos que o Instagram publica)" }, { status: 400 })
   }
 
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
 
   const path = `${user.id}/posts/${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}/${name.replace(/[^a-zA-Z0-9._-]/g, "-")}`

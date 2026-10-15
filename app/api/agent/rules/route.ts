@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   const problem = !body.mediaId ? "Informe mediaId" : ruleProblem(body)
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
 
   try {
