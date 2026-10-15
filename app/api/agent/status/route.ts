@@ -6,7 +6,7 @@ import { minutesSincePublishRun } from "@/lib/publishing"
 // GET /api/agent/status — connection health, publishing permission and remaining daily posts.
 export async function GET(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ ok: false, error: "Nenhuma conta do Instagram conectada" })
 
   const health = await checkInstagramHealth(user.access_token)

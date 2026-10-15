@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   const trial = body.trial === true
   if (trial && kind !== "reel") return NextResponse.json({ error: "Só Reel pode ser de teste" }, { status: 400 })
 
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
   if ([...paths, ...(cover ? [cover] : [])].some((p) => !p.startsWith(`${user.id}/posts/`))) {
     return NextResponse.json({ error: "Caminho de arquivo inválido (use /api/agent/upload-url)" }, { status: 400 })
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   if (!isAgentAuthorized(request)) return unauthorized()
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
   const from = request.nextUrl.searchParams.get("from") || new Date(Date.now() - 2 * 86_400_000).toISOString()
   const { data, error } = await db
@@ -89,7 +89,7 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id")
   const batch = request.nextUrl.searchParams.get("batch")
   if (!id && !batch) return NextResponse.json({ error: "Informe id ou batch" }, { status: 400 })
-  const { db, user } = await agentUser()
+  const { db, user } = await agentUser(request)
   if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
 
   let query = db.from("scheduled_posts").update({ status: "canceled", updated_at: new Date().toISOString() }).eq("user_id", user.id).eq("status", "pending")

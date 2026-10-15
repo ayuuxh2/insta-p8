@@ -16,11 +16,25 @@ export function isAgentAuthorized(request: NextRequest): boolean {
 
 export const unauthorized = () => NextResponse.json({ error: "Chave de automação inválida" }, { status: 401 })
 
-/** The connected Instagram account (single-owner app: the first allowed username). */
-export async function agentUser() {
+/**
+ * The Instagram account the agent works on.
+ *  - Without a request or an account hint: the FIRST username in ALLOWED_INSTAGRAM_USERNAMES (the env order decides,
+ *    never the database order), so connecting more accounts never changes where publishing goes by default.
+ *  - With `?account=@name` or the `X-Account` header: that account, only if it is allowed and connected. An unknown
+ *    account returns user = null instead of silently falling back to another one.
+ */
+export async function agentUser(request?: NextRequest) {
   const db = await getSupabaseServerClient()
-  const allowed = (process.env.ALLOWED_INSTAGRAM_USERNAMES || "").split(",").map((u) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean)
+  const clean = (u: string) => u.trim().replace(/^@/, "").toLowerCase()
+  const allowed = (process.env.ALLOWED_INSTAGRAM_USERNAMES || "").split(",").map(clean).filter(Boolean)
+  const wanted = clean(request?.headers.get("x-account") || request?.nextUrl.searchParams.get("account") || "")
   const { data: users } = await db.from("users").select("id, username, access_token, business_account_id")
-  const user = (users || []).find((u: any) => allowed.includes(String(u.username).toLowerCase())) || users?.[0]
-  return { db, user: user || null }
+  const list = users || []
+  const byName = (name: string) => list.find((u: any) => clean(String(u.username)) === name)
+  if (wanted) return { db, user: allowed.includes(wanted) ? byName(wanted) || null : null }
+  for (const name of allowed) {
+    const found = byName(name)
+    if (found) return { db, user: found }
+  }
+  return { db, user: list[0] || null }
 }
