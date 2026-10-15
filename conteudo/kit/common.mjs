@@ -1,7 +1,7 @@
 // Shared helpers for the Reels / Stories kit: headless Chrome rendering, ffmpeg, TTS and the agent API.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -103,6 +103,72 @@ export function mediaDuration(file) {
 
 // ---------- Narration (Microsoft neural voices through Edge's read-aloud service) ----------
 
+// ---------- Local narration (Kokoro + Whisper, no internet) ----------
+// Used first when the local voice tools exist (default E:/Ferramentas/voz, override with CEE_VOZ_DIR). The word
+// timings come from Whisper listening to the finished audio. Set CEE_VOZ=edge to force the Microsoft voice.
+const VOZ_DIR = process.env.CEE_VOZ_DIR || "E:/Ferramentas/voz"
+const VOZ_PY = path.join(VOZ_DIR, "venv/Scripts/python.exe")
+const LOCAL_VOICE = process.env.CEE_VOZ_VOICE || "pf_dora"
+let localServer = null
+
+function startLocalServer() {
+  if (localServer) return localServer
+  const child = spawn(VOZ_PY, [path.join(VOZ_DIR, "servidor.py")], { cwd: VOZ_DIR, stdio: ["pipe", "pipe", "pipe"], windowsHide: true })
+  const state = { child, buf: "", waiting: [], ready: null }
+  state.ready = new Promise((resolve, reject) => state.waiting.push({ resolve, reject }))
+  child.stdout.setEncoding("utf8")
+  child.stdout.on("data", (d) => {
+    state.buf += d
+    let i
+    while ((i = state.buf.indexOf("\n")) >= 0) {
+      const line = state.buf.slice(0, i).trim()
+      state.buf = state.buf.slice(i + 1)
+      if (!line) continue
+      const w = state.waiting.shift()
+      if (!w) continue
+      try { w.resolve(JSON.parse(line)) } catch (e) { w.reject(e) }
+    }
+  })
+  child.stderr.on("data", () => {})
+  child.on("exit", () => {
+    for (const w of state.waiting.splice(0)) w.reject(new Error("servidor de voz encerrou"))
+    localServer = null
+  })
+  // The server must not keep Node alive on its own; requests re-reference it while waiting for an answer.
+  child.unref()
+  child.stdin.unref?.()
+  child.stdout.unref?.()
+  child.stderr.unref?.()
+  localServer = state
+  return state
+}
+
+export function closeNarrator() {
+  if (!localServer) return
+  try { localServer.child.stdin.end(); localServer.child.kill() } catch {}
+  localServer = null
+}
+process.on("exit", closeNarrator)
+
+async function narrateLocal(text, dir, name, { rate = "+6%" } = {}) {
+  const state = startLocalServer()
+  const hold = (on) => { for (const s of [state.child.stdout, state.child.stdin]) on ? s.ref?.() : s.unref?.() }
+  hold(true)
+  try {
+    await state.ready
+    const out = path.join(dir, `${name}.wav`).replace(/\\/g, "/")
+    const speed = 1 + (parseFloat(String(rate).replace("%", "")) || 0) / 100
+    const reply = await new Promise((resolve, reject) => {
+      state.waiting.push({ resolve, reject })
+      state.child.stdin.write(JSON.stringify({ text, out, voice: LOCAL_VOICE, speed }) + "\n")
+    })
+    if (!reply.ok) throw new Error(reply.error || "falha na voz local")
+    return { file: out, duration: mediaDuration(out), words: reply.words }
+  } finally {
+    hold(false)
+  }
+}
+
 export const DEFAULT_VOICE = "pt-BR-FranciscaNeural"
 
 /**
@@ -110,6 +176,13 @@ export const DEFAULT_VOICE = "pt-BR-FranciscaNeural"
  * Word timings come from the TTS word boundaries and drive the burned-in captions.
  */
 export async function narrate(text, dir, name, { voice = DEFAULT_VOICE, rate = "+6%" } = {}) {
+  if (process.env.CEE_VOZ !== "edge" && existsSync(VOZ_PY)) {
+    try {
+      return await narrateLocal(text, dir, name, { rate })
+    } catch (e) {
+      console.warn("Voz local falhou, tentando a da Microsoft:", e.message)
+    }
+  }
   const { MsEdgeTTS, OUTPUT_FORMAT } = require("msedge-tts")
   const tmp = path.join(dir, `.tts-${name}`)
   resetDir(tmp)

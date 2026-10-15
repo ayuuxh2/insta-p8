@@ -13,7 +13,8 @@ Ferramentas (pasta `conteudo/kit/`, documentação no topo de cada arquivo):
 
 | Script | Faz |
 |---|---|
-| `reel.mjs <pasta>` | `reel.json` → `out/reel.mp4` (9:16, narração pt-BR, legenda palavra a palavra) + `out/capa.jpg` |
+| `reel-hf.mjs <pasta>` | **padrão desde 15/10**: `reel.json` → `out/reel.mp4` (9:16, HyperFrames: movimento de câmera, título animado, legenda em destaque, efeitos sonoros, final animado) + `out/capa.jpg` |
+| `reel.mjs <pasta>` | versão simples (fotos + legenda), só como reserva |
 | `story.mjs <pasta>` | `stories.json` → `out/story-N.jpg` |
 | `carrossel/kit/build.mjs <pasta>` | `carrossel.json` → `out/slide-N.jpg` (mesmo kit do /novo-post-produto) |
 | `combo.mjs <pasta>` | `combo.json` → carrossel "combo": capa + Reels prontos em 4:5 + chamada (`out/slide-N.jpg/.mp4`) |
@@ -101,7 +102,7 @@ conteudo/semanas/2026-10-12/
 `dmMessage`, `messageVariants`, `link`, `ruleName`, `tags`, `checkFollow` (true), `publicReplies`, `optinTitle`,
 `optinButton`. Mesma palavra-chave para todos os itens do produto; legendas diferentes por Reel.
 
-**`reel.json`** (formato no topo de `reel.mjs`): 5 a 7 cenas, **15 a 30 s** no total.
+**`reel.json`** (formato no topo de `reel.mjs`; o `reel-hf.mjs` lê o mesmo arquivo): 5 a 7 cenas, **15 a 30 s** no total.
 - Cena 1 `hook`: título = gancho (≤ 8 palavras, 1–3 em `*destaque*`), narração curta (≤ 2,5 s). Siga o estilo de
   `carrossel/referencias/capas.md` (voz de pessoa, curiosidade, humor, série).
 - Cenas do meio: um benefício/fato por cena; título ≤ 6 palavras; narração 1 frase (8–16 palavras), falada como
@@ -120,7 +121,7 @@ palavra). `batch` = data da segunda.
 ## 4. Gerar e conferir
 
 ```bash
-node conteudo/kit/reel.mjs conteudo/semanas/<semana>/<item>        # ~1 min por Reel
+node conteudo/kit/reel-hf.mjs conteudo/semanas/<semana>/<item>     # ~1m40 por Reel
 node conteudo/kit/story.mjs conteudo/semanas/<semana>/<item>
 node carrossel/kit/build.mjs conteudo/semanas/<semana>/<item>
 ```
@@ -156,5 +157,7 @@ envio falhar no meio, rode de novo: os já agendados (`agenda.result.json`) são
 
 - `agenda` diz "FALHOU": o motivo aparece na linha; o sistema tenta 3 vezes e manda alerta (ntfy/e-mail).
 - Falha de permissão de publicação: adicionar `instagram_business_content_publish` no app da Meta e reconectar.
-- Narração falhou (sem internet/serviço fora): rode o `reel.mjs` de novo; a voz vem do serviço de leitura do Edge.
+- Voz: o gerador usa primeiro a **voz local** (Kokoro "Dora" + Whisper para o tempo das palavras), instalada em `E:/Ferramentas/voz` (`CEE_VOZ_DIR` muda a pasta, `CEE_VOZ_VOICE` a voz). Se ela faltar, cai na voz da Microsoft (Edge), que devolveu erro 403 em 13/10; `CEE_VOZ=edge` força essa.
+- O `reel-hf.mjs` precisa do Python 3.12 com numpy (efeitos sonoros da skill `/edicao-motion`), do Chrome e de internet na primeira execução (baixa o `hyperframes` e a fonte Nunito para `conteudo/kit/assets/`).
+- Títulos de abertura: máximo de 2 linhas; texto muito longo estoura a largura. Prefira frases curtas com 1 a 3 palavras em `*destaque*`.
 - Música: coloque faixas livres de direitos em `conteudo/musicas/` (sorteadas) ou `"music"` no `reel.json`.
