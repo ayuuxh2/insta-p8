@@ -1,5 +1,0 @@
-[mcp_servers.supabase]
-url = "https://mcp.supabase.com/mcp?project_ref=pqbeyezosiuknqlikbef"
-
-[mcp_servers.supabase-trider]
-url = "https://mcp.supabase.com/mcp?project_ref=fsustcdwfftqxgjmmsgv"

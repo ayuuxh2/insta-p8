@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server"
 
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get("userId")
-  if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
+  if (!userId) return NextResponse.json({ error: "userId obrigatório" }, { status: 400 })
 
   const supabase = await getSupabaseServerClient()
   const { data, error } = await supabase
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const body = await request.json()
   const { userId, enabled, ai_context, groq_api_key, ai_base_url, ai_model } = body
-  if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
+  if (!userId) return NextResponse.json({ error: "userId obrigatório" }, { status: 400 })
 
   const supabase = await getSupabaseServerClient()
   const update: Record<string, unknown> = {}

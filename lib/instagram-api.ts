@@ -25,12 +25,24 @@ export interface SendResult {
   error?: any
 }
 
+// The token goes in the Authorization header, never in the URL (URLs end up in logs).
+export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` })
+
+/** Short human-readable description of a Graph API error, for the event log. */
+export function describeGraphError(error: any): string {
+  if (!error) return "erro desconhecido"
+  if (typeof error === "string") return error
+  if (error.name === "TimeoutError" || error.name === "AbortError") return "o Instagram demorou para responder"
+  const code = error.code ? `código ${error.code}${error.error_subcode ? `/${error.error_subcode}` : ""}` : ""
+  return [error.message || error.type, code].filter(Boolean).join(" · ").slice(0, 300)
+}
+
 async function post(path: string, token: string, body: any): Promise<SendResult> {
   try {
-    const res = await fetch(`${GRAPH}/${path}?access_token=${encodeURIComponent(token)}`, {
+    const res = await fetch(`${GRAPH}/${path}`, {
       method: "POST",
       signal: AbortSignal.timeout(15000),
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader(token) },
       body: JSON.stringify(body),
     })
     const json = await res.json()
@@ -65,6 +77,65 @@ export function buildCardAttachment(card: IGCard) {
   }
 }
 
+// Postback payload prefixes for the follow-gate flow. The rule id follows the prefix.
+export const OPTIN_PAYLOAD_PREFIX = "WANT_"
+export const UNLOCK_PAYLOAD_PREFIX = "UNLOCK_CONTENT_"
+
+/**
+ * First message of a follow-gated comment rule, sent as a private reply.
+ * Instagram only lets us check `is_user_follow_business` after the person
+ * interacts in the DM, so we ask them to tap a button before checking.
+ * With `followUsername` (follow-gated rules) the card also offers "Seguir" up front: whoever
+ * follows before tapping gets the content right away, skipping the slow "message request" round trip.
+ */
+export function buildOptInCard(params: {
+  ruleId: string
+  title?: string
+  subtitle?: string
+  buttonTitle?: string
+  followUsername?: string
+}): IGCard {
+  const want: IGButton = {
+    type: "postback",
+    title: (params.buttonTitle?.trim() || "Quero receber").slice(0, 20),
+    payload: `${OPTIN_PAYLOAD_PREFIX}${params.ruleId}`,
+  }
+  const defaultSubtitle = params.followUsername
+    ? `Só para quem segue a @${params.followUsername}. Siga e toque em "${want.title}" 👇`
+    : "Toque no botão abaixo que eu te envio aqui no direct."
+  return {
+    title: params.title?.trim() || "Quer receber? 🎁",
+    subtitle: (params.subtitle?.trim() || defaultSubtitle).slice(0, 80),
+    buttons: params.followUsername
+      ? [{ type: "web_url", url: `https://instagram.com/${params.followUsername}`, title: "Seguir" }, want]
+      : [want],
+  }
+}
+
+/**
+ * Whether the person follows the business account. Only valid after they interacted
+ * in the DM (message, button tap, story reply). Returns null when Instagram could not
+ * answer; callers must treat null as "not confirmed" and never deliver gated content.
+ */
+export async function checkFollowsBusiness(token: string, igScopedId: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`${GRAPH}/${igScopedId}?fields=is_user_follow_business`, {
+      headers: authHeader(token),
+      signal: AbortSignal.timeout(5000),
+    })
+    const json = await res.json()
+    if (!res.ok || json.error) {
+      console.error(`[ig-api] follow check failed (${res.status}):`, json.error?.code, json.error?.message)
+      return null
+    }
+    if (typeof json.is_user_follow_business !== "boolean") return null
+    return json.is_user_follow_business
+  } catch (e: any) {
+    console.error("[ig-api] follow check network error:", e?.name || e)
+    return null
+  }
+}
+
 /**
  * Build the follower-gate card shown to non-followers. Centralized so the
  * comment, story, and DM branches all share the same copy and the same
@@ -78,11 +149,11 @@ export function buildFollowGateCard(params: {
   subtitle?: string
 }): IGCard {
   return {
-    title: params.title ?? "Before you lose me",
-    subtitle: params.subtitle ?? `Follow @${params.username} to unlock this content!`,
+    title: params.title ?? "Quase lá! 👀",
+    subtitle: params.subtitle ?? `Siga a @${params.username} e toque em "Já segui" para receber.`,
     buttons: [
-      { type: "web_url", url: `https://instagram.com/${params.username}`, title: "Follow" },
-      { type: "postback", title: "I Followed! ✅", payload: `UNLOCK_CONTENT_${params.ruleId}` },
+      { type: "web_url", url: `https://instagram.com/${params.username}`, title: "Seguir" },
+      { type: "postback", title: "Já segui ✅", payload: `${UNLOCK_PAYLOAD_PREFIX}${params.ruleId}` },
     ],
   }
 }
@@ -151,7 +222,7 @@ export async function replyToComment(token: string, commentId: string, message: 
 
 export async function fetchProfile(token: string, igUserId: string): Promise<{ username?: string; name?: string } | null> {
   try {
-    const res = await fetch(`${GRAPH}/${igUserId}?fields=username,name&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000) })
+    const res = await fetch(`${GRAPH}/${igUserId}?fields=username,name`, { headers: authHeader(token), signal: AbortSignal.timeout(5000) })
     const json = await res.json()
     if (!res.ok || json.error) return null
     return json
@@ -162,7 +233,7 @@ export async function fetchProfile(token: string, igUserId: string): Promise<{ u
 
 export async function verifyIdOwnership(token: string, id: string): Promise<boolean> {
   try {
-    const res = await fetch(`${GRAPH}/${id}?fields=id&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000) })
+    const res = await fetch(`${GRAPH}/${id}?fields=id`, { headers: authHeader(token), signal: AbortSignal.timeout(5000) })
     return res.ok
   } catch {
     return false

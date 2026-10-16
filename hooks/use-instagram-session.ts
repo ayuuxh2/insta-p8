@@ -8,6 +8,7 @@ export function useInstagramSession() {
     const [userId, setUserId] = useState<string | null>(null)
     const [profilePic, setProfilePic] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     const searchParams = useSearchParams()
     const router = useRouter()
@@ -25,6 +26,10 @@ export function useInstagramSession() {
                     })
                     const data = await res.json()
 
+                    if (!data.success && data.error !== "Code already used") {
+                        setError(data.error || "Não foi possível conectar o Instagram. Tente de novo.")
+                        router.replace("/dashboard")
+                    }
                     if (data.success) {
                         localStorage.setItem("ig_user_id", data.userId)
                         localStorage.setItem("ig_username", data.username)
@@ -38,6 +43,7 @@ export function useInstagramSession() {
                     }
                 } catch (err) {
                     console.error("Login failed:", err)
+                    setError("Não foi possível conectar o Instagram. Verifique sua internet e tente de novo.")
                 }
             }
             // CASE B: Restore Session from LocalStorage
@@ -57,16 +63,16 @@ export function useInstagramSession() {
         handleSession()
     }, [searchParams, router])
 
-    const logout = () => {
+    const logout = async () => {
         localStorage.removeItem("ig_user_id")
         localStorage.removeItem("ig_username")
         localStorage.removeItem("ig_profile_pic")
-        document.cookie = "insta_session=; Max-Age=0; path=/;"
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
         setUsername(null)
         setUserId(null)
         setProfilePic(null)
-        router.push("/")
+        window.location.href = "/login"
     }
 
-    return { userId, username, profilePic, isLoading, logout }
+    return { userId, username, profilePic, isLoading, error, logout }
 }

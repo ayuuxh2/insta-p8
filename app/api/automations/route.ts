@@ -4,7 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server"
 export async function GET(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get("userId")
-    if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+    if (!userId) return NextResponse.json({ error: "userId ausente" }, { status: 400 })
 
     const supabase = await getSupabaseServerClient()
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     console.error("[v0] Automations GET error:", error)
-    return NextResponse.json({ error: "Failed to fetch" }, { status: 500 })
+    return NextResponse.json({ error: "Não foi possível carregar" }, { status: 500 })
   }
 }
 
@@ -29,12 +29,12 @@ export async function POST(request: NextRequest) {
     const { userId, name, trigger_source, trigger_type, trigger_value, content, specific_media_id } = await request.json()
 
     if (!userId || !name || !trigger_value || !content || !trigger_source) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+      return NextResponse.json({ error: "Campos ausentes" }, { status: 400 })
     }
 
     // Validate trigger_source
     if (!['comment', 'dm', 'story'].includes(trigger_source)) {
-      return NextResponse.json({ error: "Invalid trigger source" }, { status: 400 })
+      return NextResponse.json({ error: "Origem do gatilho inválida" }, { status: 400 })
     }
 
     const supabase = await getSupabaseServerClient()
@@ -65,21 +65,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     console.error("[v0] Automations POST error:", error)
-    return NextResponse.json({ error: "Failed to create" }, { status: 500 })
+    return NextResponse.json({ error: "Não foi possível criar" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
     const id = request.nextUrl.searchParams.get("id")
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 })
+    if (!id) return NextResponse.json({ error: "id ausente" }, { status: 400 })
     const supabase = await getSupabaseServerClient()
     const { error } = await supabase.from("automations").delete().eq("id", id)
     if (error) throw error
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[v0] Automations DELETE error:", error)
-    return NextResponse.json({ error: "Failed to delete" }, { status: 500 })
+    return NextResponse.json({ error: "Não foi possível excluir" }, { status: 500 })
   }
 }
 
@@ -88,12 +88,12 @@ export async function PUT(request: NextRequest) {
     const { id, name, trigger_source, trigger_type, trigger_value, content, specific_media_id } = await request.json()
 
     if (!id || !name || !trigger_value || !content) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+      return NextResponse.json({ error: "Campos ausentes" }, { status: 400 })
     }
 
     // Validate trigger_source if provided
     if (trigger_source && !['comment', 'dm', 'story'].includes(trigger_source)) {
-      return NextResponse.json({ error: "Invalid trigger source" }, { status: 400 })
+      return NextResponse.json({ error: "Origem do gatilho inválida" }, { status: 400 })
     }
 
     const supabase = await getSupabaseServerClient()
@@ -122,14 +122,14 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     console.error("[v0] Automations PUT error:", error)
-    return NextResponse.json({ error: "Failed to update" }, { status: 500 })
+    return NextResponse.json({ error: "Não foi possível atualizar" }, { status: 500 })
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
     const { id, is_active, action } = await request.json()
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 })
+    if (!id) return NextResponse.json({ error: "id ausente" }, { status: 400 })
 
     const supabase = await getSupabaseServerClient()
 
@@ -139,7 +139,7 @@ export async function PATCH(request: NextRequest) {
         .select("*")
         .eq("id", id)
         .single()
-      if (fetchError || !original) return NextResponse.json({ error: "Not found" }, { status: 404 })
+      if (fetchError || !original) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
       const { id: _id, created_at, updated_at, ...rest } = original
       const { data, error } = await supabase
@@ -152,7 +152,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (typeof is_active !== "boolean") {
-      return NextResponse.json({ error: "Missing is_active" }, { status: 400 })
+      return NextResponse.json({ error: "is_active ausente" }, { status: 400 })
     }
 
     const { data, error } = await supabase
@@ -166,6 +166,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     console.error("[v0] Automations PATCH error:", error)
-    return NextResponse.json({ error: "Failed to update" }, { status: 500 })
+    return NextResponse.json({ error: "Não foi possível atualizar" }, { status: 500 })
   }
 }

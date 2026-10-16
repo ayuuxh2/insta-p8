@@ -10,13 +10,16 @@ interface TagInputProps {
     onChange: (tags: string[]) => void
     placeholder?: string
     className?: string
+    // Keywords are lowercased and split on commas; sentences (public replies,
+    // message variations) keep their casing and commas.
+    sentences?: boolean
 }
 
-export function TagInput({ value, onChange, placeholder, className }: TagInputProps) {
+export function TagInput({ value, onChange, placeholder, className, sentences = false }: TagInputProps) {
     const [inputValue, setInputValue] = useState("")
 
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Enter" || e.key === ",") {
+        if (e.key === "Enter" || (e.key === "," && !sentences)) {
             e.preventDefault()
             addTag()
         } else if (e.key === "Backspace" && !inputValue && value.length > 0) {
@@ -26,7 +29,7 @@ export function TagInput({ value, onChange, placeholder, className }: TagInputPr
     }
 
     const addTag = () => {
-        const trimmed = inputValue.trim().toLowerCase()
+        const trimmed = sentences ? inputValue.trim() : inputValue.trim().toLowerCase()
         if (trimmed && !value.includes(trimmed)) {
             onChange([...value, trimmed])
             setInputValue("")

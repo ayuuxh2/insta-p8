@@ -1,0 +1,22 @@
+import { randomUUID } from "crypto"
+import { type NextRequest, NextResponse } from "next/server"
+import { agentUser, isAgentAuthorized, unauthorized } from "@/lib/agent"
+import { FILES_BUCKET } from "@/lib/files"
+
+// POST /api/agent/upload-url { name } → signed URL to upload one post file to private storage:
+// a JPEG (carousel slide, photo, Story, Reel cover) or an MP4 (Reel or video Story, up to 50 MB).
+export async function POST(request: NextRequest) {
+  if (!isAgentAuthorized(request)) return unauthorized()
+  const { name } = await request.json().catch(() => ({}))
+  if (typeof name !== "string" || !/\.(jpe?g|mp4)$/i.test(name)) {
+    return NextResponse.json({ error: "Envie imagens .jpg ou vídeos .mp4 (formatos que o Instagram publica)" }, { status: 400 })
+  }
+
+  const { db, user } = await agentUser(request)
+  if (!user) return NextResponse.json({ error: "Nenhuma conta do Instagram conectada" }, { status: 400 })
+
+  const path = `${user.id}/posts/${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}/${name.replace(/[^a-zA-Z0-9._-]/g, "-")}`
+  const { data, error } = await db.storage.from(FILES_BUCKET).createSignedUploadUrl(path)
+  if (error || !data) return NextResponse.json({ error: `Não foi possível preparar o envio: ${error?.message}` }, { status: 500 })
+  return NextResponse.json({ path, signedUrl: data.signedUrl })
+}

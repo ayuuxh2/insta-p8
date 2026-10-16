@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
         const { userId, recipientId, message, attachment } = body
 
         if (!userId || !recipientId || (!message && !attachment)) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+            return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 })
         }
 
         const supabase = await getSupabaseServerClient()
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
             .single()
 
         if (userError || !user) {
-            return NextResponse.json({ error: "User not found" }, { status: 404 })
+            return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
         }
 
         // 2. Prepare Payload for Instagram API
@@ -34,10 +34,10 @@ export async function POST(request: NextRequest) {
 
         // 3. Send to Instagram
         const res = await fetch(
-            `https://graph.instagram.com/v24.0/me/messages?access_token=${user.access_token}`,
+            "https://graph.instagram.com/v24.0/me/messages",
             {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.access_token}` },
                 body: JSON.stringify(apiBody)
             }
         )
@@ -46,7 +46,16 @@ export async function POST(request: NextRequest) {
 
         if (data.error) {
             console.error("[Inbox Send] Instagram API Error:", data.error)
-            return NextResponse.json({ error: data.error.message }, { status: 500 })
+            // Instagram only allows replies within 24h of the customer's last message.
+            const outsideWindow =
+                data.error.error_subcode === 2534022 || /outside of allowed window|allowed window/i.test(data.error.message || "")
+            const notFound = data.error.error_subcode === 2534014
+            const friendly = outsideWindow
+                ? "Passaram mais de 24 horas desde a última mensagem desta pessoa. O Instagram só permite responder dentro desse prazo — aguarde ela escrever de novo."
+                : notFound
+                    ? "O Instagram não encontrou esta pessoa (a conta pode ter sido desativada ou bloqueado a loja)."
+                    : `O Instagram recusou a mensagem: ${data.error.message}`
+            return NextResponse.json({ error: friendly }, { status: outsideWindow ? 422 : 502 })
         }
 
         // 4. Log to Database (Outbound Message)
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
                 user_id: userId,
                 sender_id: user.business_account_id,
                 sender_username: user.username,
-                content: message || "[Attachment]",
+                content: message || "[Anexo]",
                 is_from_instagram: false
             })
 
@@ -83,6 +92,6 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error("[Inbox Send] Internal Error:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+        return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
     }
 }

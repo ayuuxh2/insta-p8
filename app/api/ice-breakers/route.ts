@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams
         const userId = searchParams.get("userId")
 
-        if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+        if (!userId) return NextResponse.json({ error: "userId ausente" }, { status: 400 })
 
         const supabase = await getSupabaseServerClient()
         const { data, error } = await supabase
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(data)
     } catch (error) {
         console.error("Ice Breaker GET Error:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+        return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
     }
 }
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         const { userId, iceBreakers } = body // Array of ice breakers
 
         if (!userId || !Array.isArray(iceBreakers)) {
-            return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+            return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
         }
 
         const supabase = await getSupabaseServerClient()
@@ -60,41 +60,31 @@ export async function POST(request: NextRequest) {
         const { data: user } = await supabase.from("users").select("access_token, page_id").eq("id", userId).single()
 
         if (user && user.access_token && user.page_id) {
-            // Construct IG Payload
-            const ice_breakers = inserted.map((ib: any) => ({
-                question: ib.question,
-                payload: `ICE_BREAKER_${ib.id}`
+            // Tapping a question sends a messaging_postbacks event with this payload; the webhook
+            // looks the question up by id and answers with its saved response.
+            // Format per Meta docs: call_to_actions grouped by locale ("default" is required); max 4.
+            const callToActions = (inserted || []).slice(0, 4).map((ib: any) => ({
+                question: String(ib.question).slice(0, 80),
+                payload: `ICE_BREAKER_${ib.id}`,
             }))
+            const headers = { "Content-Type": "application/json", Authorization: `Bearer ${user.access_token}` }
 
-            // We need to SAVE/MAP this payload to the response? 
-            // Actually, for simple text reply, we can handle the payload in webhook. 
-            // BUT, our current webhook looks for Keywords or Postbacks. 
-            // Let's assume standard behavior: User clicks question -> It sends the question as text? 
-            // No, Ice Breakers send a Postback payload usually. 
-            // IF we want to reply with the `response`, we need to map the payload to the response.
-            // Let's update the DB insert to include payload if possible, or just match by Question Text (easier for now).
-            // IG says: "When a person taps an ice breaker, your webhook receives a messaging_postbacks event."
-
-            // Wait, current DB schema doesn't have payload. 
-            // Let's use the 'question' as the trigger for now or rely on the fact that we just need to set them.
-            // Actually, keeping it simple: We set them on IG. When user clicks, we get a Postback.
-            // We need to know which response to send. 
-
-            const response = await fetch(
-                `https://graph.instagram.com/v21.0/me/messenger_profile?access_token=${user.access_token}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        ice_breakers: ice_breakers,
-                        platform: "instagram" // Important
-                    })
-                }
-            )
+            // An empty list removes the ice breakers from the Instagram profile.
+            const response = callToActions.length
+                ? await fetch("https://graph.instagram.com/v24.0/me/messenger_profile", {
+                      method: "POST",
+                      headers,
+                      body: JSON.stringify({ platform: "instagram", ice_breakers: [{ call_to_actions: callToActions, locale: "default" }] }),
+                  })
+                : await fetch("https://graph.instagram.com/v24.0/me/messenger_profile", {
+                      method: "DELETE",
+                      headers,
+                      body: JSON.stringify({ platform: "instagram", fields: ["ice_breakers"] }),
+                  })
             const igResult = await response.json()
             if (igResult.error) {
                 console.error("IG Sync Error", igResult.error)
-                return NextResponse.json({ success: true, warning: "Saved to DB but IG Sync failed", error: igResult.error }, { status: 200 })
+                return NextResponse.json({ success: true, warning: "Salvo no banco, mas a sincronização com o Instagram falhou", error: igResult.error }, { status: 200 })
             }
         }
 
@@ -102,6 +92,6 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error("Ice Breaker POST Error:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+        return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
     }
 }

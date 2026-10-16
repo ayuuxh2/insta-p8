@@ -1,0 +1,22 @@
+# Checks the Instagram connection every 30 minutes and lets the app send an alert if it is down.
+# Vercel's free cron runs only once a day, so this uses GitHub Actions (free).
+# Setup: repository Settings → Secrets and variables → Actions → New secret:
+#   CRON_SECRET = same value as the CRON_SECRET variable on Vercel
+name: Checar conexão do Instagram
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Chamar /api/cron/health
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "Secret CRON_SECRET não configurado"; exit 1; fi
+          curl -fsS --max-time 60 -H "Authorization: Bearer $CRON_SECRET" https://cee-automacao.vercel.app/api/cron/health

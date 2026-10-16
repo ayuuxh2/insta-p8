@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { MobileNav } from "@/components/layout/mobile-nav"
+import { ConnectionBanner } from "@/components/layout/connection-banner"
+import { LandingPage } from "@/components/layout/landing-page"
+import { BrandLogo } from "@/components/brand-logo"
 import { useInstagramSession } from "@/hooks/use-instagram-session"
 import { Loader2 } from "lucide-react"
 
@@ -11,7 +14,7 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode
 }) {
-    const { username, profilePic, logout, isLoading } = useInstagramSession()
+    const { userId, username, profilePic, logout, isLoading, error } = useInstagramSession()
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
     useEffect(() => {
@@ -34,13 +37,16 @@ export default function DashboardLayout({
         )
     }
 
+    // No Instagram account in this browser yet (first visit or after "Sair"): show the connect screen.
+    if (!userId) return <LandingPage error={error} />
+
     return (
         <div className="flex min-h-screen bg-background text-foreground">
             {/* Desktop Sidebar */}
             <div className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 z-50 transition-[width] duration-200 ${sidebarCollapsed ? "md:w-[72px]" : "md:w-64"}`}>
                 <Sidebar
                     className="h-full border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
-                    username={username || "User"}
+                    username={username || "Usuário"}
                     profilePic={profilePic}
                     onLogout={logout}
                     collapsed={sidebarCollapsed}
@@ -52,9 +58,11 @@ export default function DashboardLayout({
             <div className={`flex-1 flex flex-col transition-[padding] duration-200 ${sidebarCollapsed ? "md:pl-[72px]" : "md:pl-64"}`}>
                 {/* Mobile Header (Visible only on small screens) */}
                 <header className="md:hidden h-16 border-b border-border bg-background flex items-center justify-between px-4 sticky top-0 z-40">
-                    <span className="font-serif-display text-xl text-foreground">insta-p8</span>
-                    <MobileNav username={username || "User"} profilePic={profilePic} onLogout={logout} />
+                    <BrandLogo className="h-8" />
+                    <MobileNav username={username || "Usuário"} profilePic={profilePic} onLogout={logout} />
                 </header>
+
+                <ConnectionBanner userId={userId} />
 
                 <main className="dashboard-canvas flex-1 relative overflow-auto">
                     {children}

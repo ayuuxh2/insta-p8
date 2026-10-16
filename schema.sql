@@ -220,32 +220,14 @@ CREATE INDEX IF NOT EXISTS idx_reels_posts_user_status ON public.reels_posts(use
 CREATE INDEX IF NOT EXISTS idx_unlock_attempts_updated ON public.unlock_attempts(updated_at);
 
 -- ==========================================
--- Storage Bucket: reels
+-- Storage
 -- ==========================================
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('reels', 'reels', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
-
--- Drop storage policies if they exist to prevent duplicates
+-- No public storage policies: anonymous visitors must not upload or delete
+-- files. Uploads go through the server (service-role key) and downloads use
+-- signed URLs. Remove the open policies created by older versions of this file.
 DROP POLICY IF EXISTS "Public Uploads" ON storage.objects;
 DROP POLICY IF EXISTS "Public Viewing" ON storage.objects;
 DROP POLICY IF EXISTS "Public Deletion" ON storage.objects;
-
--- Create policies for storage
-CREATE POLICY "Public Uploads"
-ON storage.objects FOR INSERT
-TO public
-WITH CHECK (bucket_id = 'reels');
-
-CREATE POLICY "Public Viewing"
-ON storage.objects FOR SELECT
-TO public
-USING (bucket_id = 'reels');
-
-CREATE POLICY "Public Deletion"
-ON storage.objects FOR DELETE
-TO public
-USING (bucket_id = 'reels');
 
 -- =========================================================================
 -- SECURITY: Row Level Security (RLS) for public schema tables
@@ -423,6 +405,9 @@ BEGIN
 END;
 $$;
 
+-- Only the server (service role) may call this; block the public anon key.
+REVOKE EXECUTE ON FUNCTION public.bump_unlock_attempt(TEXT) FROM PUBLIC, anon, authenticated;
+
 -- =========================================================================
 -- Periodic cleanup of stale unlock_attempts (older than 24h).
 -- Set up via Supabase pg_cron (Dashboard -> Database -> Extensions -> pg_cron), then:
@@ -431,3 +416,263 @@ $$;
 -- Or run manually in the SQL editor:
 --   DELETE FROM public.unlock_attempts WHERE updated_at < NOW() - INTERVAL '24 hours';
 -- =========================================================================
+
+-- =========================================================================
+-- Etapa 3 — anti-spam: idempotency, hourly send limit, queue, contacts/opt-out.
+-- Safe to run more than once. Run in Supabase -> SQL Editor.
+-- =========================================================================
+
+-- One row per webhook event already handled (comment id, message mid).
+-- Meta retries deliveries; inserting first and skipping on conflict
+-- guarantees we never answer the same event twice.
+CREATE TABLE IF NOT EXISTS public.processed_events (
+  event_key TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_processed_events_created ON public.processed_events(created_at);
+
+-- Every message we send, to enforce Instagram's hourly limits.
+CREATE TABLE IF NOT EXISTS public.send_log (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- 'private_reply' | 'dm' | 'public_reply'
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_send_log_user_kind_created ON public.send_log(user_id, kind, created_at);
+
+-- Comments that arrived while the hourly limit was reached. Drained later
+-- (private replies stay valid for 7 days after the comment).
+CREATE TABLE IF NOT EXISTS public.pending_replies (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  automation_id UUID NOT NULL REFERENCES public.automations(id) ON DELETE CASCADE,
+  comment_id TEXT NOT NULL UNIQUE,
+  sender_id TEXT NOT NULL,
+  comment_created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pending_replies_user_created ON public.pending_replies(user_id, created_at);
+
+-- People who interacted with the account (base for the contacts screen).
+CREATE TABLE IF NOT EXISTS public.contacts (
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  ig_id TEXT NOT NULL,
+  username TEXT,
+  opted_out BOOLEAN NOT NULL DEFAULT FALSE,
+  opted_out_at TIMESTAMPTZ,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, ig_id)
+);
+
+-- Server-only tables: RLS on, no policies -> the public anon key cannot read them.
+ALTER TABLE public.processed_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.send_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pending_replies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
+
+-- =========================================================================
+-- Etapa 4 — base de contatos: follow status, tags, interaction history.
+-- Safe to run more than once. Run in Supabase -> SQL Editor.
+-- Requires migrations/003_etapa3_antispam.sql.
+-- =========================================================================
+
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS follows BOOLEAN;            -- null = not checked yet
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS follows_checked_at TIMESTAMPTZ;
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS last_event TEXT;
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS last_keyword TEXT;
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS last_automation_id UUID;
+CREATE INDEX IF NOT EXISTS idx_contacts_user_last_seen ON public.contacts(user_id, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contacts_tags ON public.contacts USING GIN (tags);
+
+-- Every interaction, for the contact history and the metrics funnel.
+--   comment, dm, story, optin_tap, unlock_tap, content_sent, gate_sent, opt_out, opt_in, link_click
+CREATE TABLE IF NOT EXISTS public.contact_events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  ig_id TEXT NOT NULL,
+  event TEXT NOT NULL,
+  automation_id UUID REFERENCES public.automations(id) ON DELETE SET NULL,
+  keyword TEXT,
+  media_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_contact_events_user_created ON public.contact_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contact_events_contact ON public.contact_events(user_id, ig_id, created_at DESC);
+ALTER TABLE public.contact_events ENABLE ROW LEVEL SECURITY;
+
+-- Adds tags without duplicates (used by rules with automatic tags).
+CREATE OR REPLACE FUNCTION public.add_contact_tags(p_user_id BIGINT, p_ig_id TEXT, p_tags TEXT[])
+RETURNS VOID
+LANGUAGE sql
+AS $$
+  UPDATE public.contacts
+     SET tags = ARRAY(SELECT DISTINCT unnest(tags || p_tags) ORDER BY 1)
+   WHERE user_id = p_user_id AND ig_id = p_ig_id;
+$$;
+REVOKE EXECUTE ON FUNCTION public.add_contact_tags(BIGINT, TEXT, TEXT[]) FROM PUBLIC, anon, authenticated;
+
+-- Contacts with their interaction count (what the Contacts screen lists).
+CREATE OR REPLACE VIEW public.contacts_overview
+WITH (security_invoker = true) AS
+SELECT c.*,
+       (SELECT COUNT(*) FROM public.contact_events e WHERE e.user_id = c.user_id AND e.ig_id = c.ig_id) AS interactions
+  FROM public.contacts c;
+
+-- Bring in people who already talked to the account before this table existed.
+INSERT INTO public.contacts (user_id, ig_id, username, first_seen_at, last_seen_at, last_event)
+SELECT user_id, recipient_id, NULLIF(recipient_username, ''), COALESCE(created_at, NOW()), COALESCE(last_message_at, NOW()), 'dm'
+  FROM public.conversations
+ON CONFLICT (user_id, ig_id) DO NOTHING;
+
+-- =========================================================================
+-- Etapa 5 — file delivery and tracked links.
+-- Safe to run more than once. Run in Supabase -> SQL Editor.
+-- Requires migrations/004_etapa4_contatos.sql.
+-- =========================================================================
+
+-- Private bucket: files are only reachable through short-lived signed URLs
+-- created by the server when someone opens a tracked link. 50 MB per file.
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('arquivos', 'arquivos', false, 52428800)
+ON CONFLICT (id) DO UPDATE SET public = false, file_size_limit = 52428800;
+
+CREATE TABLE IF NOT EXISTS public.files (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  storage_path TEXT NOT NULL UNIQUE,
+  size_bytes BIGINT NOT NULL DEFAULT 0,
+  mime_type TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_files_user_created ON public.files(user_id, created_at DESC);
+ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
+
+-- One short link per delivered URL/file per person, so clicks are attributed.
+CREATE TABLE IF NOT EXISTS public.tracked_links (
+  code TEXT PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  automation_id UUID REFERENCES public.automations(id) ON DELETE SET NULL,
+  ig_id TEXT,
+  target_url TEXT,
+  file_id UUID REFERENCES public.files(id) ON DELETE CASCADE,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  first_click_at TIMESTAMPTZ,
+  last_click_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (target_url IS NOT NULL OR file_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_tracked_links_user_created ON public.tracked_links(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tracked_links_automation ON public.tracked_links(automation_id);
+ALTER TABLE public.tracked_links ENABLE ROW LEVEL SECURITY;
+
+-- Atomic click counter.
+CREATE OR REPLACE FUNCTION public.register_link_click(p_code TEXT)
+RETURNS VOID
+LANGUAGE sql
+AS $$
+  UPDATE public.tracked_links
+     SET clicks = clicks + 1,
+         first_click_at = COALESCE(first_click_at, NOW()),
+         last_click_at = NOW()
+   WHERE code = p_code;
+$$;
+REVOKE EXECUTE ON FUNCTION public.register_link_click(TEXT) FROM PUBLIC, anon, authenticated;
+
+-- =========================================================================
+-- Etapa 7 — event log (Preferências → Diagnóstico).
+-- Safe to run more than once. Run in Supabase -> SQL Editor.
+-- =========================================================================
+
+-- webhook_events existed in the original schema but was never written to.
+CREATE INDEX IF NOT EXISTS idx_webhook_events_user_processed ON public.webhook_events(user_id, processed_at DESC);
+ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
+
+-- =========================================================================
+-- Agenda de publicações — fila de Reels, carrosséis e Stories publicados
+-- automaticamente por /api/cron/publish (chamado a cada 10 min pelo GitHub Actions).
+-- Safe to run more than once. Run in Supabase -> SQL Editor.
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.scheduled_posts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  -- reel | carousel | image | story
+  kind TEXT NOT NULL CHECK (kind IN ('reel', 'carousel', 'image', 'story')),
+  label TEXT NOT NULL DEFAULT '',
+  batch TEXT NOT NULL DEFAULT '',
+  scheduled_at TIMESTAMPTZ NOT NULL,
+  -- pending → processing (container created) → published | failed | canceled
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'published', 'failed', 'canceled')),
+  media_paths TEXT[] NOT NULL DEFAULT '{}',
+  cover_path TEXT,
+  caption TEXT NOT NULL DEFAULT '',
+  -- Body for the comment/story-reply rule created after publishing (same fields as /api/agent/rules), or null.
+  rule JSONB,
+  -- Reel de teste (Trial Reel): only non-followers at first, auto-shared to followers if it performs well.
+  trial BOOLEAN NOT NULL DEFAULT FALSE,
+  container_id TEXT,
+  media_id TEXT,
+  permalink TEXT,
+  rule_id UUID,
+  attempts INT NOT NULL DEFAULT 0,
+  error TEXT,
+  processing_since TIMESTAMPTZ,
+  published_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_posts_due ON public.scheduled_posts(status, scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_posts_user ON public.scheduled_posts(user_id, scheduled_at DESC);
+
+-- Only the server (service role) touches this table.
+ALTER TABLE public.scheduled_posts ENABLE ROW LEVEL SECURITY;
+
+-- =========================================================================
+-- Fluxos de conversa em etapas (ex.: RAIOX): o sistema faz uma pergunta por vez, guarda as respostas e,
+-- no fim, registra um pedido. Um worker (skill) analisa o pedido e o sistema entrega o resultado na DM.
+-- Safe to run more than once. Run in Supabase -> SQL Editor.
+--
+-- status:
+--   coletando  → fazendo as perguntas (a próxima resposta é a etapa `step`)
+--   pedido     → perguntas respondidas, esperando o worker
+--   analisando → o worker pegou o pedido
+--   entregue   → resultado enviado na DM
+--   falhou     → não foi possível entregar (motivo em last_error); o dono recebe um aviso
+--   cancelado  → a pessoa pediu para sair ou o fluxo foi reiniciado
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS public.lead_flows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  ig_id TEXT NOT NULL,
+  username TEXT,
+  automation_id UUID REFERENCES public.automations(id) ON DELETE SET NULL,
+  flow TEXT NOT NULL,
+  step INT NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'coletando'
+    CHECK (status IN ('coletando', 'pedido', 'analisando', 'entregue', 'falhou', 'cancelado')),
+  answers JSONB NOT NULL DEFAULT '[]'::jsonb,
+  invalid_tries INT NOT NULL DEFAULT 0,
+  attempts INT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  result_path TEXT,
+  result_cover_path TEXT,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_inbound_at TIMESTAMPTZ,
+  requested_at TIMESTAMPTZ,
+  claimed_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Only one open flow per person and flow type.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_lead_flows_open
+  ON public.lead_flows (user_id, ig_id, flow)
+  WHERE status IN ('coletando', 'pedido', 'analisando');
+CREATE INDEX IF NOT EXISTS idx_lead_flows_queue ON public.lead_flows (user_id, status, requested_at);
+ALTER TABLE public.lead_flows ENABLE ROW LEVEL SECURITY;

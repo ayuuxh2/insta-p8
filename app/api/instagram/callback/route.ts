@@ -18,22 +18,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  return NextResponse.json({ error: "Invalid callback" }, { status: 400 })
+  return NextResponse.json({ error: "Callback inválido" }, { status: 400 })
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { code } = body
-    if (!code) return NextResponse.json({ error: "No code" }, { status: 400 })
+    if (!code) return NextResponse.json({ error: "Código ausente" }, { status: 400 })
 
     // 1. Env Vars
-    const clientId = process.env.INSTAGRAM_APP_ID
-    const clientSecret = process.env.INSTAGRAM_APP_SECRET
-    const redirectUri = process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI
+    const clientId = process.env.INSTAGRAM_APP_ID?.trim()
+    const clientSecret = process.env.INSTAGRAM_APP_SECRET?.trim()
+    const redirectUri = process.env.NEXT_PUBLIC_INSTAGRAM_REDIRECT_URI?.trim()
 
     if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error("Missing Env Vars: Check INSTAGRAM_APP_ID")
+      throw new Error("Variáveis de ambiente ausentes: verifique INSTAGRAM_APP_ID")
     }
 
     // 2. Exchange Code for Short Token
@@ -55,10 +55,10 @@ export async function POST(request: NextRequest) {
     if (!tokenRes.ok) {
       if (tokenData.error_message?.includes("authorization code has been used")) {
         // Harmless double-fire from React StrictMode or double clicks
-        return NextResponse.json({ error: "Code already used" }, { status: 400 })
+        return NextResponse.json({ error: "Código já utilizado" }, { status: 400 })
       }
-      console.error("[v0] 🔴 Token Error:", JSON.stringify(tokenData, null, 2))
-      return NextResponse.json({ error: tokenData.error_description || "Token failed" }, { status: 400 })
+      console.error("[v0] 🔴 Token Error:", tokenData.error_type, tokenData.error_message)
+      return NextResponse.json({ error: tokenData.error_description || "Falha ao obter o token" }, { status: 400 })
     }
 
     const shortToken = tokenData.access_token
@@ -80,10 +80,10 @@ export async function POST(request: NextRequest) {
 
     try {
       const meRes = await fetch(
-        `https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`
+        "https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url",
+        { headers: { Authorization: `Bearer ${accessToken}` } },
       )
       const meData = await meRes.json()
-      console.log("[v0] 📋 /me response:", JSON.stringify(meData))
 
       if (meData.username) username = meData.username
       if (meData.profile_picture_url) profilePic = meData.profile_picture_url
@@ -95,6 +95,16 @@ export async function POST(request: NextRequest) {
       }
     } catch (e) {
       console.error("[v0] /me request failed:", e)
+    }
+
+    // 5. Only accounts listed in ALLOWED_INSTAGRAM_USERNAMES may be connected.
+    const allowed = (process.env.ALLOWED_INSTAGRAM_USERNAMES || "")
+      .split(",")
+      .map(name => name.trim().replace(/^@/, "").toLowerCase())
+      .filter(Boolean)
+    if (!allowed.includes(username.toLowerCase())) {
+      console.warn(`[callback] Rejected Instagram account @${username}: not in ALLOWED_INSTAGRAM_USERNAMES`)
+      return NextResponse.json({ error: `A conta @${username} não está autorizada neste painel` }, { status: 403 })
     }
 
     // 6. Save/Update User
@@ -117,14 +127,21 @@ export async function POST(request: NextRequest) {
 
     if (upsertError) throw upsertError
 
-    const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
-    response.cookies.set("insta_session", JSON.stringify({ username, userId: loginUserId }), {
-      path: "/",
-      maxAge: expiresIn,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    })
-    return response
+    // 7. Subscribe the account to webhook events; without this Meta delivers nothing.
+    try {
+      const subRes = await fetch(
+        `https://graph.instagram.com/v24.0/me/subscribed_apps?subscribed_fields=comments,messages,messaging_postbacks`,
+        { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      const subData = await subRes.json()
+      if (!subRes.ok || !subData.success) {
+        console.error("[callback] Webhook subscription failed:", subData.error?.message || subData)
+      }
+    } catch (e) {
+      console.error("[callback] Webhook subscription request failed:", e)
+    }
+
+    return NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

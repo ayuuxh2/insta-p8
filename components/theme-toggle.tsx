@@ -64,8 +64,8 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={handleToggle}
       role="switch"
       aria-checked={isDark}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-      title={`Switch to ${isDark ? "light" : "dark"} theme`}
+      aria-label={`Mudar para tema ${isDark ? "claro" : "escuro"}`}
+      title={`Mudar para tema ${isDark ? "claro" : "escuro"}`}
       className={cn(
         "group relative inline-flex h-8 w-16 shrink-0 items-center rounded-full border border-border bg-secondary transition-colors",
         "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
@@ -86,7 +86,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         )}
       </span>
       {/* Hidden but readable label for assistive tech that ignores aria-label */}
-      <span className="sr-only">{isDark ? "Dark theme enabled" : "Light theme enabled"}</span>
+      <span className="sr-only">{isDark ? "Tema escuro ativado" : "Tema claro ativado"}</span>
     </button>
   )
 }

@@ -4,7 +4,7 @@ import { getSupabaseServerClient } from "@/lib/supabase-server"
 export async function GET(request: NextRequest) {
     try {
         const userId = request.nextUrl.searchParams.get("userId")
-        if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+        if (!userId) return NextResponse.json({ error: "userId ausente" }, { status: 400 })
 
         const supabase = await getSupabaseServerClient()
 
@@ -20,6 +20,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(conversations)
     } catch (error) {
         console.error("[Inbox] Conversations GET error:", error)
-        return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 })
+        return NextResponse.json({ error: "Não foi possível carregar as conversas" }, { status: 500 })
     }
 }
