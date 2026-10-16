@@ -35,6 +35,7 @@ import {
 } from "@/lib/antispam"
 import { recordEvent, setFollows, addTags, setUsernameIfMissing, deleteContactData, isDeleteRequest, DELETE_CONFIRMATION } from "@/lib/contacts"
 import { trackUrlsInText, withFileLink, trackCard } from "@/lib/links"
+import { flowOf, getOpenFlow, recentFlowStatus, startFlow, cancelOpenFlows, bumpInvalid, saveAnswer, looksLikeContact, summarizeAnswers, type FlowRow } from "@/lib/flows"
 import { classifyGraphError, HEALTH_TEXT } from "@/lib/health"
 import { sendAlert } from "@/lib/notify"
 
@@ -553,6 +554,12 @@ async function handleComment(db: Db, user: any, rules: any[], value: any, ownIds
   }
   console.log(`[webhook] Comment match: "${match.name}"`)
 
+  // Conversation flow (e.g. RAIOX): one request per person at a time; no second first-message while one is open or recent.
+  const flowCfg = flowOf(content)
+  if (flowCfg && (await recentFlowStatus(db, user.id, senderId, flowCfg.id))) {
+    return `"${match.name}": a pessoa já tem um pedido em andamento ou recente (sem nova mensagem)`
+  }
+
   const { optedOut } = await touchContact(db, user.id, senderId, value.from?.username)
   await recordEvent(db, user.id, senderId, "comment", {
     automationId: match.id,
@@ -591,6 +598,12 @@ async function privateReplyAndRecord(db: Db, user: any, rule: any, content: any,
   if (result.ok) {
     const direct = content.direct_send === true && content.check_follow !== true
     await recordEvent(db, user.id, senderId, direct ? "content_sent" : "optin_sent", { automationId: rule.id })
+    // A conversation flow starts when its first message goes out; the next replies are answers (see handleFlowAnswer).
+    const flowCfg = flowOf(content)
+    if (flowCfg) {
+      await startFlow(db, user.id, senderId, flowCfg.id, rule.id)
+      await recordEvent(db, user.id, senderId, "flow_q1", { automationId: rule.id })
+    }
   }
   return result
 }
@@ -733,6 +746,7 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
     const command = optCommand(triggerValue)
     if (command) {
       await setOptOut(db, user.id, senderId, command === "out")
+      if (command === "out") await cancelOpenFlows(db, user.id, senderId)
       await recordEvent(db, user.id, senderId, command === "out" ? "opt_out" : "opt_in")
       const text = command === "out" ? OPT_OUT_CONFIRMATION : OPT_IN_CONFIRMATION
       const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, text))
@@ -741,6 +755,13 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
     }
     // People who opted out only get messages they explicitly ask for by tapping a button.
     if (optedOut) return "pessoa saiu da lista: sem resposta automática"
+
+    // A conversation flow in progress (e.g. RAIOX): this text is the answer to the last question.
+    const open = await getOpenFlow(db, user.id, senderId)
+    if (open) {
+      const handled = await handleFlowAnswer(db, user, rules, senderId, triggerValue, String(event.message?.text || triggerValue), open, reply)
+      if (handled) return handled
+    }
   }
 
   // ---------- Match automation ----------
@@ -782,6 +803,21 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
 
   console.log(`[webhook] DM match: "${match.name}"`)
   const content = parseContent(match.response_content)
+
+  // A person who already has this flow in progress or finished does not get the first question again.
+  const matchFlow = flowOf(content)
+  if (matchFlow) {
+    const recent = await recentFlowStatus(db, user.id, senderId, matchFlow.id)
+    if (recent === "pedido" || recent === "analisando" || recent === "entregue") {
+      const text =
+        recent === "entregue"
+          ? "O seu Raio-X já foi enviado aqui neste direct. Se não encontrar, role a conversa até a mensagem com o link."
+          : "O seu pedido já está em andamento. Assim que o Raio-X ficar pronto, eu envio por aqui."
+      const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, text))
+      await reply(result.ok ? text : null)
+      return sendOutcome(user, result.ok, `"${match.name}": pedido já registrado (${recent})`)
+    }
+  }
   await addTags(db, user.id, senderId, content.add_tags)
   if (content.mark_seen !== false) await sendSenderAction(user.access_token, senderId, "mark_seen")
 
@@ -793,7 +829,80 @@ async function handleMessagingEvent(db: Db, user: any, rules: any[], event: any,
       ? await runFollowGate(db, user, senderId, match, content, isUnlockEvent, instant)
       : await deliver(db, user, senderId, match, content, instant)
   await reply(preview)
+  if (preview && matchFlow) {
+    await startFlow(db, user.id, senderId, matchFlow.id, match.id)
+    await recordEvent(db, user.id, senderId, "flow_q1", { automationId: match.id })
+  }
   return sendOutcome(user, !!preview, `"${match.name}": ${preview && preview.startsWith("[") ? preview : "conteúdo enviado"}`)
+}
+
+/**
+ * The person is in the middle of a conversation flow: store this text as the answer, ask the next question or,
+ * after the last one, close the flow, register the request (status "pedido") and warn the owner.
+ * Returns the event-log outcome, or null to let the normal rule matching handle the text (e.g. they typed the keyword again).
+ */
+async function handleFlowAnswer(
+  db: Db,
+  user: any,
+  rules: any[],
+  senderId: string,
+  lowerText: string,
+  rawText: string,
+  open: FlowRow,
+  reply: (preview: string | null) => Promise<void>,
+): Promise<string | null> {
+  const rule = rules.find((r) => r.id === open.automation_id)
+  const cfg = rule ? flowOf(parseContent(rule.response_content)) : null
+  if (!rule || !cfg) {
+    await cancelOpenFlows(db, user.id, senderId)
+    return null
+  }
+  // Typing the flow's keyword again restarts it through the normal rule path.
+  const restart = rules.find(
+    (r) => r.trigger_type === "keyword" && r.trigger_value && flowOf(parseContent(r.response_content))?.id === cfg.id && keywordMatches(r.trigger_value, lowerText),
+  )
+  if (restart) {
+    await cancelOpenFlows(db, user.id, senderId)
+    return null
+  }
+
+  const content = parseContent(rule.response_content)
+  await sendSenderAction(user.access_token, senderId, "mark_seen")
+  const say = async (text: string): Promise<SendResult> => {
+    if (content.typing_indicator === true) await sendSenderAction(user.access_token, senderId, "typing_on")
+    await wait(humanDelayMs(content))
+    const result = await tracked(db, user, { id: senderId }, sendTextDM(user.access_token, { id: senderId }, text))
+    if (result.ok) await reply(text)
+    return result
+  }
+
+  // The first answer must contain an @ or a website; ask once more, then accept whatever comes.
+  if (open.step === 1 && cfg.validate_first === "contact" && open.invalid_tries < 1 && !looksLikeContact(rawText)) {
+    await bumpInvalid(db, open)
+    const retry = cfg.retry_message || "Não consegui identificar o @ nem o site. Pode me mandar de novo, por favor?"
+    const result = await say(retry)
+    return sendOutcome(user, result.ok, `"${rule.name}": pediu o @ ou o site de novo`)
+  }
+
+  const { done, nextMessage } = await saveAnswer(db, open, cfg, rawText)
+  await recordEvent(db, user.id, senderId, done ? "flow_done" : (`flow_q${Math.min(open.step + 1, 4)}` as "flow_q2"), { automationId: rule.id })
+  const result = await say(nextMessage)
+
+  if (done) {
+    if (cfg.done_tag) await addTags(db, user.id, senderId, [cfg.done_tag])
+    if (cfg.notify) {
+      const { data: contact } = await db.from("contacts").select("username").eq("user_id", user.id).eq("ig_id", senderId).maybeSingle()
+      const updated = { ...open, answers: [...(open.answers || []), { step: open.step, text: rawText, at: new Date().toISOString() }] } as FlowRow
+      const who = contact?.username ? `@${contact.username}` : `id ${senderId}`
+      await sendAlert(
+        db,
+        `flow:${open.id}`,
+        cfg.notify_title || "Novo pedido recebido",
+        `${who} (conta @${user.username})\n\n${summarizeAnswers(updated, cfg.labels || [])}`,
+      )
+    }
+  }
+  return sendOutcome(user, result.ok, done ? `"${rule.name}": pedido registrado (${cfg.id})` : `"${rule.name}": pergunta ${open.step + 1} enviada`)
 }
 
 async function aiFallback(db: Db, user: any, senderId: string, text: string, conv: { id: string } | null): Promise<boolean> {

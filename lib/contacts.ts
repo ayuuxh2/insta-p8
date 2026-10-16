@@ -14,6 +14,11 @@ export type ContactEvent =
   | "opt_out"
   | "opt_in"
   | "link_click"
+  | "flow_q1"
+  | "flow_q2"
+  | "flow_q3"
+  | "flow_q4"
+  | "flow_done"
 
 // Events that represent the person doing something (they update "last interaction").
 const TRIGGER_EVENTS = new Set<ContactEvent>(["comment", "dm", "story", "optin_tap", "unlock_tap", "opt_out", "opt_in", "link_click"])
@@ -87,6 +92,11 @@ export async function deleteContactData(db: Db, userId: number | string, igId: s
     ["unlock_attempts", () => db.from("unlock_attempts").delete().like("key", `${igId}::%`)],
     ["contacts", () => db.from("contacts").delete().eq("user_id", userId).eq("ig_id", igId)],
   ]
+  // Conversation flows (e.g. RAIOX): remove the answers and any result file (PDF) kept for this person.
+  const { data: flows } = await db.from("lead_flows").select("result_path, result_cover_path").eq("user_id", userId).eq("ig_id", igId)
+  const files = (flows || []).flatMap((r: any) => [r.result_path, r.result_cover_path]).filter(Boolean)
+  if (files.length) await db.storage.from("arquivos").remove(files)
+  steps.push(["lead_flows", () => db.from("lead_flows").delete().eq("user_id", userId).eq("ig_id", igId)])
   const { data: conv } = await db.from("conversations").select("id").eq("user_id", userId).eq("recipient_id", igId).maybeSingle()
   if (conv) {
     steps.push(["messages", () => db.from("messages").delete().eq("conversation_id", conv.id)])
