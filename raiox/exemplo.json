@@ -1,0 +1,26 @@
+{
+  "negocio": "Clóvis Eduardo",
+  "handle": "@cloviseduardo",
+  "segmento": "Gestão de tráfego pago",
+  "cidade": "Jundiaí, SP",
+  "data": "07/10/2026",
+  "resumo": "A oferta e a prova já estão prontas, mas o perfil está parado há 56 dias e o site manda o visitante direto para o pagamento, sem conversa.",
+  "checks": [
+    {"area": "Perfil e bio", "status": "atencao", "evidencia": "A bio diz o que você faz, mas não diz para quem nem qual é o próximo passo."},
+    {"area": "Constância", "status": "critico", "evidencia": "Último post em 12/08/2026: 56 dias sem publicar."},
+    {"area": "Conteúdo", "status": "atencao", "evidencia": "9 dos 14 Reels recentes passam de 90 segundos, e 11 dos 16 posts não têm comentário."},
+    {"area": "Site e oferta", "status": "ok", "evidencia": "Oferta, preço, garantia e 2 depoimentos com nome logo na primeira página."},
+    {"area": "Caminho até a conversa", "status": "critico", "evidencia": "O botão principal abre o checkout. O WhatsApp só aparece como link no fim da página."},
+    {"area": "Anúncios ativos", "status": "nv", "evidencia": "Não consegui confirmar: sem o link da página na Biblioteca de Anúncios, não aparece se há anúncio ativo."}
+  ],
+  "vazamentos": [
+    {"titulo": "Perfil parado", "visto": "16 posts entre 24/04 e 12/08, e nenhum depois disso.", "custo": "Quem chega por anúncio ou indicação abre o perfil, vê a data do último post e desconfia que o negócio parou."},
+    {"titulo": "Clique frio direto no pagamento", "visto": "O primeiro botão do site abre o checkout de R$97.", "custo": "Serviço se compra depois de uma conversa. Sem um caminho para tirar dúvida, o visitante interessado vai embora."},
+    {"titulo": "Um convite diferente a cada post", "visto": "Quatro chamadas nos 16 posts: me chama, análise gratuita, guia em PDF e comenta.", "custo": "Sem um convite único e repetido, ninguém grava qual é o próximo passo."}
+  ],
+  "acoes": [
+    {"titulo": "Voltar a publicar com calendário fixo", "detalhe": "5 posts por semana, com Reels de 20 a 40 segundos."},
+    {"titulo": "Colocar o WhatsApp como segundo botão no topo do site", "detalhe": "Com mensagem pronta, para quem ainda tem dúvida antes de comprar."},
+    {"titulo": "Usar um único convite em todo o conteúdo", "detalhe": "Uma palavra, uma entrega e um prazo, repetidos em todos os posts."}
+  ]
+}

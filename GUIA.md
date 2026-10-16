@@ -25,6 +25,7 @@ Funciona sozinho, 24 horas por dia:
 | `/pesquisar-produtos` | Acha e ranqueia produtos para divulgar como afiliado (Amazon, Mercado Livre, Shopee): comissão, demanda, nota, gancho | Quando não sabe o que postar |
 | `/semana-conteudo` | Produz **a semana inteira**: Reels narrados, Stories, carrosséis, combos, vitrine. Você aprova uma vez e tudo é publicado sozinho nos horários | **Rotina principal**, 1 vez por semana |
 | `/novo-post-produto` | Faz **um carrossel avulso** e publica na hora, com a regra de DM | Produto que surgiu no meio da semana / post urgente |
+| `/raiox-automatico` | **Só da conta @cloviseduardo.** Quem comenta/envia RAIOX responde 3 perguntas no Direct; a cada 15 min (tarefa agendada, com o PC ligado) o Claude lê o perfil e o site, gera o PDF na marca nova e entrega no Direct, sem revisão. O que não foi possível ler aparece no PDF e na mensagem. Falhas viram alerta no celular | Automático. Regras criadas por `node raiox/criar-regras.mjs` (depois da migração 010) |
 
 ## 2. Ordem lógica (a rotina)
 

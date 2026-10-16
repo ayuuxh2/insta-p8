@@ -36,3 +36,7 @@ carrossel/referencias/*.png
 conteudo/semanas/
 conteudo/musicas/
 *.local.sql
+
+# Raio-X automatico
+raiox/pedidos/
+raiox/saida/
