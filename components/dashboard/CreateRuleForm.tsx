@@ -2,14 +2,20 @@
 
 import { useState, useEffect, useMemo } from "react"
 import {
-  Plus, Trash2, Film, Check, MessageCircle, Send, AtSign, Heart,
-  MessageSquare, Image as ImageIcon, Timer, Eye, Megaphone, Lock,
-  Link2, Zap, ChevronDown, ChevronRight, ChevronLeft, X, Loader2,
+  Plus, Trash2, Film, Check, MessageCircle, AtSign, Heart,
+  MessageSquare, Image as ImageIcon, Timer, Eye, Lock,
+  Link2, Zap, ChevronRight, ChevronLeft, Loader2,
   ArrowLeft, Phone, Video, Info, Sparkles, Smile, Camera, Mic, Image as PicIcon,
   Globe
 } from "lucide-react"
 import { TagInput } from "@/components/ui/tag-input"
 import type { ProButton, QuickReplyOption, Automation } from "@/lib/types"
+import {
+  MAX_CARD_BUTTONS,
+  cardButtonPreviewLabel,
+  serializeCardButtons,
+  validateCardButtons,
+} from "@/lib/card-buttons"
 import { toast } from "sonner"
 
 /* ============================================================
@@ -32,6 +38,11 @@ const STEPS = [
   { key: "settings", label: "Review", sub: "Name and publish" },
 ] as const
 
+// Monotonic counter so two buttons added in the same millisecond never share an
+// id/React key (a collision previously made a row fail to render or update).
+let buttonIdSeq = 0
+const nextButtonId = () => `btn_${Date.now().toString(36)}_${(buttonIdSeq++).toString(36)}`
+
 export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: CreateRuleFormProps) {
   const isEditing = !!editRule
   const [step, setStep] = useState(0)
@@ -48,6 +59,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
   const [cardTitle, setCardTitle] = useState("")
   const [cardSubtitle, setCardSubtitle] = useState("")
   const [cardImage, setCardImage] = useState("")
+  const [cardUrl, setCardUrl] = useState("")
   const [buttons, setButtons] = useState<ProButton[]>([])
   const [mediaUrl, setMediaUrl] = useState("")
   const [mediaType, setMediaType] = useState<"image" | "video" | "audio">("image")
@@ -104,7 +116,7 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     if (content.media?.url) {
       setType("media"); setMediaUrl(content.media.url); setMediaType(content.media.type || "image"); setMessageText(content.message || "")
     } else if (content.card) {
-      setType("card"); setCardTitle(content.card.title || ""); setCardSubtitle(content.card.subtitle || ""); setCardImage(content.card.image_url || "")
+      setType("card"); setCardTitle(content.card.title || ""); setCardSubtitle(content.card.subtitle || ""); setCardImage(content.card.image_url || ""); setCardUrl(content.card.url || "")
       setButtons((content.card.buttons || []).map((b: any, i: number) => ({ id: `${Date.now()}_${i}`, ...b })))
     } else {
       setType("text"); setMessageText(content.message || "")
@@ -135,12 +147,16 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
   /* ---------- helpers ---------- */
   const addButton = () => {
-    if (buttons.length >= 3) return
-    setButtons([...buttons, { id: Date.now().toString(), type: "web_url", title: "", url: "", payload: "" }])
+    setButtons((current) => {
+      if (current.length >= MAX_CARD_BUTTONS) return current
+      return [...current, { id: nextButtonId(), type: "web_url", title: "", url: "", payload: "" }]
+    })
   }
+  // Functional updates: reading `buttons` from the closure dropped edits when two
+  // interactions landed in the same render (e.g. adding then typing quickly).
   const updateButton = (id: string, field: keyof ProButton, value: string) =>
-    setButtons(buttons.map((b) => (b.id === id ? { ...b, [field]: value } : b)))
-  const removeButton = (id: string) => setButtons(buttons.filter((b) => b.id !== id))
+    setButtons((current) => current.map((b) => (b.id === id ? { ...b, [field]: value } : b)))
+  const removeButton = (id: string) => setButtons((current) => current.filter((b) => b.id !== id))
 
   const addQuickReply = () => {
     if (quickReplies.length >= 4) return
@@ -156,20 +172,38 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     ? hasSelectedReelOption // Comment trigger is valid once they select a specific post or global option
     : !needsKeywords || triggers.length > 0
 
+  // Buttons are part of the saved payload, so an incomplete button must block
+  // publishing (with a visible reason) instead of being silently dropped on save.
+  // Only relevant when a card is actually the DM payload; with a comment
+  // "public_only" reply the card is unused, so it must not block saving.
+  const usesCard = type === "card" && replyMode !== "public_only"
+  const buttonError = usesCard ? validateCardButtons(buttons) : null
   const thenValid =
     replyMode === "public_only" ||
     (type === "text" ? messageText.trim().length > 0 : type === "card" ? cardTitle.trim().length > 0 : mediaUrl.trim().length > 0)
-  const canSave = whenValid && thenValid && name.trim().length > 0
 
+  // The Response step must agree with Publish. An invalid card button blocks
+  // *advancing to Review*, not just the final save — otherwise the Review step
+  // looked complete while Publish stayed disabled with no visible reason.
   const stepValid = [
-    whenValid,  // step 0
-    thenValid,  // step 1
+    whenValid, // step 0
+    thenValid && !buttonError, // step 1
     name.trim().length > 0, // step 2
   ]
+  const canSave = stepValid.every(Boolean)
   const sourceLabel = triggerSource === "comment" ? "comment" : triggerSource === "dm" ? "direct message" : "story"
-  const validationHint = step === 0
-    ? triggerSource === "comment" && !hasSelectedReelOption ? "Choose a post, reel, or All posts to continue." : needsKeywords && triggers.length === 0 ? "Add at least one keyword to continue." : ""
-    : step === 1 && !thenValid ? "Add the reply people should receive." : step === 2 && !name.trim() ? "Give this workflow a name before publishing." : ""
+  const validationHint =
+    step === 0
+      ? triggerSource === "comment" && !hasSelectedReelOption
+        ? "Choose a post, reel, or All posts to continue."
+        : needsKeywords && triggers.length === 0
+          ? "Add at least one keyword to continue."
+          : ""
+      : step === 1
+        ? buttonError || (!thenValid ? "Add the reply people should receive." : "")
+        : step === 2 && !name.trim()
+          ? "Give this workflow a name before publishing."
+          : ""
 
   /* Plain-language summary sentence */
   const summary = useMemo(() => {
@@ -192,7 +226,13 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
 
   /* ---------- save ---------- */
   const handleSubmit = async () => {
-    if (!canSave || saving) return
+    if (saving) return
+    // Guard even when the button is disabled, so the reason is always surfaced.
+    if (usesCard) {
+      const err = validateCardButtons(buttons)
+      if (err) { toast.error(err); return }
+    }
+    if (!canSave) return
     setSaving(true)
 
     const isReplyAll = triggerSource === "comment" && triggers.length === 0
@@ -214,18 +254,17 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
     } else if (type === "media") {
       content.media = { type: mediaType, url: mediaUrl.trim() }
       if (messageText.trim()) content.message = messageText
-    } else {
-      const cleanButtons = buttons
-        .map((b) => {
-          if (b.type === "web_url") {
-            let cleanUrl = b.url?.trim() || ""
-            if (cleanUrl.startsWith("https://https://")) cleanUrl = cleanUrl.replace("https://https://", "https://")
-            return { type: "web_url" as const, title: b.title, url: cleanUrl }
-          }
-          return { type: "postback" as const, title: b.title, payload: b.payload }
-        })
-        .filter((b) => b.title)
-      content.card = { title: cardTitle, subtitle: cardSubtitle || undefined, image_url: cardImage || undefined, buttons: cleanButtons }
+    } else if (usesCard) {
+      // Validated above. A "public_only" reply never sends the card, so it must
+      // not be serialized either — otherwise a stale/incomplete card would be
+      // persisted and later rejected by the API for a rule that never uses it.
+      content.card = {
+        title: cardTitle,
+        subtitle: cardSubtitle || undefined,
+        image_url: cardImage || undefined,
+        url: cardUrl || undefined,
+        buttons: serializeCardButtons(buttons),
+      }
     }
 
     const payload = {
@@ -251,7 +290,8 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
         toast.success(isEditing ? "Automation updated" : "Automation is live")
         onSuccess()
       } else {
-        toast.error("Could not save — try again")
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || "Could not save — try again")
       }
     } catch {
       toast.error("Network error")
@@ -575,16 +615,23 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                         <FieldLabel>Card configuration</FieldLabel>
                         <TextField value={cardTitle} onChange={setCardTitle} placeholder="Card main title" />
                         <TextField value={cardSubtitle} onChange={setCardSubtitle} placeholder="Subtitle description (optional)" />
-                        <TextField value={cardImage} onChange={setCardImage} placeholder="Cover image URL (optional)" />
+                        <TextField value={cardImage} onChange={setCardImage} placeholder="Cover image URL (direct .jpg/.png link)" />
+                        <p className="text-[11px] text-muted-foreground">
+                          Instagram fetches this itself, so it must be a direct image file — a website or search page will not work.
+                        </p>
+                        <TextField value={cardUrl} onChange={setCardUrl} placeholder="Link URL — opens when the card is tapped (optional)" />
                       </div>
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between border-b border-border pb-2">
-                          <FieldLabel>Interactive buttons ({buttons.length}/3)</FieldLabel>
-                          <button type="button" onClick={addButton} disabled={buttons.length >= 3}
+                          <FieldLabel>Interactive buttons ({buttons.length}/{MAX_CARD_BUTTONS})</FieldLabel>
+                          <button type="button" onClick={addButton} disabled={buttons.length >= MAX_CARD_BUTTONS}
                             className="font-mono-ui text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40 flex items-center gap-1 transition-colors">
                             <Plus className="w-3 h-3" /> Add button
                           </button>
                         </div>
+                        {buttonError && (
+                          <p role="alert" className="text-[11px] text-red-400">{buttonError}</p>
+                        )}
                         {buttons.map((btn) => (
                           <div key={btn.id} className="flex gap-2 items-center bg-white/[0.02] p-3 rounded-2xl border border-border">
                             <input
@@ -850,12 +897,19 @@ export function CreateRuleForm({ userId, triggerSource, onSuccess, editRule }: C
                           <div className="p-3">
                             <p className="text-xs font-bold text-foreground line-clamp-1">{cardTitle || "Card Title"}</p>
                             {cardSubtitle && <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 leading-tight">{cardSubtitle}</p>}
+                            {cardUrl && <p className="text-[10px] text-[#3797f0] mt-1 truncate">{cardUrl}</p>}
                           </div>
-                          {buttons.filter((b) => b.title).map((b) => (
-                            <div key={b.id} className="border-t border-border py-2 text-center text-[10px] font-bold text-[#3797f0] bg-white/[0.01] cursor-pointer hover:bg-white/[0.03] transition-colors">
-                              {b.title}
-                            </div>
-                          ))}
+                          {buttons.map((b, i) => {
+                            const label = cardButtonPreviewLabel(b, i)
+                            return (
+                              <div
+                                key={b.id}
+                                className={`border-t border-border py-2 text-center text-[10px] font-bold bg-white/[0.01] cursor-pointer hover:bg-white/[0.03] transition-colors ${label.complete ? "text-[#3797f0]" : "text-muted-foreground italic"}`}
+                              >
+                                {label.text}
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                       {type === "media" && (

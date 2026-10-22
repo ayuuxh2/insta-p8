@@ -1,10 +1,46 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { isHttpUrl, validateImageUrl } from "@/lib/instagram-api"
+import { validateCardButtons } from "@/lib/card-buttons"
+import { requireUser, requireOwnedRow } from "@/lib/api-auth"
+
+/**
+ * Card/Link replies go to Instagram as a generic template. Instagram fetches
+ * `image_url` itself and only the template's `default_action` produces a
+ * tappable link, so both URLs are validated before the rule is persisted.
+ */
+async function validateCardContent(content: any): Promise<string | null> {
+  const card = content?.card
+  if (!card) return null
+
+  const link = typeof card.url === "string" ? card.url.trim() : ""
+  if (link && !isHttpUrl(link)) {
+    return "The card link must be a full http(s) URL."
+  }
+
+  const image = typeof card.image_url === "string" ? card.image_url.trim() : ""
+  if (image) {
+    const check = await validateImageUrl(image)
+    if (!check.valid) return check.reason || "The card image URL is not a valid image."
+  }
+
+  // Buttons are part of the documented ResponseContent contract: ≤3, only
+  // web_url/postback, each needing a title plus its url (web_url) or payload
+  // (postback). Rejecting here is what stops a titled-but-urlless button from
+  // being stored and previewed while the sender silently drops it.
+  const buttonsError = validateCardButtons(card.buttons)
+  if (buttonsError) return buttonsError
+
+  return null
+}
 
 export async function GET(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get("userId")
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+
+    const denied = requireUser(request, userId)
+    if (denied) return denied
 
     const supabase = await getSupabaseServerClient()
 
@@ -36,6 +72,12 @@ export async function POST(request: NextRequest) {
     if (!['comment', 'dm', 'story'].includes(trigger_source)) {
       return NextResponse.json({ error: "Invalid trigger source" }, { status: 400 })
     }
+
+    const denied = requireUser(request, userId)
+    if (denied) return denied
+
+    const cardError = await validateCardContent(content)
+    if (cardError) return NextResponse.json({ error: cardError }, { status: 400 })
 
     const supabase = await getSupabaseServerClient()
 
@@ -74,6 +116,10 @@ export async function DELETE(request: NextRequest) {
     const id = request.nextUrl.searchParams.get("id")
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 })
     const supabase = await getSupabaseServerClient()
+
+    const owned = await requireOwnedRow(request, supabase, "automations", "id", id)
+    if ("denied" in owned) return owned.denied
+
     const { error } = await supabase.from("automations").delete().eq("id", id)
     if (error) throw error
     return NextResponse.json({ success: true })
@@ -97,6 +143,12 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = await getSupabaseServerClient()
+
+    const owned = await requireOwnedRow(request, supabase, "automations", "id", id)
+    if ("denied" in owned) return owned.denied
+
+    const cardError = await validateCardContent(content)
+    if (cardError) return NextResponse.json({ error: cardError }, { status: 400 })
 
     const updateData: any = {
       name,
@@ -132,6 +184,9 @@ export async function PATCH(request: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 })
 
     const supabase = await getSupabaseServerClient()
+
+    const owned = await requireOwnedRow(request, supabase, "automations", "id", id)
+    if ("denied" in owned) return owned.denied
 
     if (action === "duplicate") {
       const { data: original, error: fetchError } = await supabase

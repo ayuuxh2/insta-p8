@@ -1,13 +1,27 @@
 const ts = require('typescript')
 const fs = require('node:fs')
+const path = require('node:path')
 const assert = require('node:assert/strict')
 
-function load(path) {
+// Transpile a .ts file and run it, resolving its own extensionless relative
+// imports (TypeScript-style) to the sibling .ts files. Without this, a module
+// that imports e.g. './url-safety' cannot be required directly by Node.
+function load(filePath) {
   const module = { exports: {} }
-  const code = ts.transpileModule(fs.readFileSync(path, 'utf8'), {
+  const code = ts.transpileModule(fs.readFileSync(filePath, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
-  new Function('exports', 'require', 'module', code)(module.exports, require, module)
+  const dir = path.dirname(filePath)
+  const localRequire = (specifier) => {
+    if (specifier.startsWith('.')) {
+      const base = path.resolve(dir, specifier)
+      for (const candidate of [`${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')]) {
+        if (fs.existsSync(candidate)) return load(candidate)
+      }
+    }
+    return require(specifier)
+  }
+  new Function('exports', 'require', 'module', code)(module.exports, localRequire, module)
   return module.exports
 }
 

@@ -1,8 +1,25 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { serializeSession, sessionCookieOptions, sessionSecretProblem } from "@/lib/api-auth"
+import { redactSecrets } from "@/lib/redact"
+import { handleWebhookVerification, isMetaWebhookDelivery } from "@/lib/webhook-verify"
+// Reuse the real Instagram webhook processor. Importing the route module keeps a
+// single source of truth for event handling instead of duplicating it here.
+import { POST as handleMetaWebhookDelivery } from "../webhook/route"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
+
+  // Meta webhook verification (hub.* query params).
+  // The canonical webhook endpoint is /api/instagram/webhook — that is where Meta
+  // should deliver events. This branch exists so the OAuth callback also answers the
+  // verification handshake, keeping webhook setup working for anyone who pointed the
+  // Meta "Callback URL" at this route instead. Event POSTs are also handled here (see
+  // POST below) and delegated to the webhook processor.
+  if (searchParams.has("hub.mode")) {
+    return handleWebhookVerification(searchParams)
+  }
+
   const code = searchParams.get("code")
   const error = searchParams.get("error")
 
@@ -23,8 +40,47 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { code } = body
+    const rawBody = await request.text()
+    const signature = request.headers.get("x-hub-signature-256")
+
+    // Meta delivers webhook event POSTs to whatever URL is registered as the
+    // Instagram webhook "Callback URL" in the App Dashboard. When that still
+    // points at this OAuth callback (the production 400 in the logs), incoming
+    // DMs land here and used to fall through to the `{ code }` branch below,
+    // failing with {"error":"No code"} and never reaching an automation.
+    // A verified Meta delivery is handed to the same processor
+    // /api/instagram/webhook uses, so replies work regardless of which URL the
+    // dashboard advertises (the dashboard should still be pointed at
+    // /api/instagram/webhook).
+    if (isMetaWebhookDelivery(rawBody, signature)) {
+      console.log(
+        "[callback] Meta webhook delivery detected - delegating to the Instagram webhook processor",
+      )
+      return handleMetaWebhookDelivery(
+        new NextRequest(request.url, {
+          method: "POST",
+          headers: request.headers,
+          body: rawBody,
+        }),
+      )
+    }
+
+    // Fail before touching Instagram / the database when this deployment cannot
+    // issue a trustworthy session. Minting an unsigned cookie would be worse
+    // than a clear error, so this is a hard stop.
+    const sessionProblem = sessionSecretProblem()
+    if (sessionProblem) {
+      console.error(`[callback] refusing login: ${sessionProblem}`)
+      return NextResponse.json({ error: "Server session is not configured" }, { status: 500 })
+    }
+
+    let body: any
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json({ error: "No code" }, { status: 400 })
+    }
+    const code = body?.code
     if (!code) return NextResponse.json({ error: "No code" }, { status: 400 })
 
     // 1. Env Vars
@@ -57,7 +113,7 @@ export async function POST(request: NextRequest) {
         // Harmless double-fire from React StrictMode or double clicks
         return NextResponse.json({ error: "Code already used" }, { status: 400 })
       }
-      console.error("[v0] 🔴 Token Error:", JSON.stringify(tokenData, null, 2))
+      console.error("[v0] 🔴 Token Error:", redactSecrets(tokenData))
       return NextResponse.json({ error: tokenData.error_description || "Token failed" }, { status: 400 })
     }
 
@@ -83,7 +139,7 @@ export async function POST(request: NextRequest) {
         `https://graph.instagram.com/v24.0/me?fields=user_id,username,profile_picture_url&access_token=${accessToken}`
       )
       const meData = await meRes.json()
-      console.log("[v0] 📋 /me response:", JSON.stringify(meData))
+      console.log("[v0] 📋 /me response:", redactSecrets(meData))
 
       if (meData.username) username = meData.username
       if (meData.profile_picture_url) profilePic = meData.profile_picture_url
@@ -94,7 +150,7 @@ export async function POST(request: NextRequest) {
         console.warn(`[v0] ⚠️ /me did not return user_id, using loginUserId: ${loginUserId}`)
       }
     } catch (e) {
-      console.error("[v0] /me request failed:", e)
+      console.error("[v0] /me request failed:", redactSecrets(e))
     }
 
     // 6. Save/Update User
@@ -118,15 +174,16 @@ export async function POST(request: NextRequest) {
     if (upsertError) throw upsertError
 
     const response = NextResponse.json({ success: true, username, userId: loginUserId, profilePic })
-    response.cookies.set("insta_session", JSON.stringify({ username, userId: loginUserId }), {
-      path: "/",
-      maxAge: expiresIn,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    })
+    // The cookie lifetime is the signed session lifetime, not the access-token
+    // lifetime: the server enforces the same deadline inside the token.
+    const { name, ...cookieOptions } = sessionCookieOptions()
+    response.cookies.set(name, serializeSession({ username, userId: loginUserId }), cookieOptions)
     return response
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    // Never echo a raw error to the client: a failed fetch can embed the token
+    // or client secret in its message.
+    console.error("[callback] login failed:", redactSecrets(error))
+    return NextResponse.json({ error: "Login failed" }, { status: 500 })
   }
 }

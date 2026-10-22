@@ -1,12 +1,11 @@
 // Shared types for the automation system
-export type ButtonAction = "web_url" | "postback"
+import type { CardButton, CardButtonType } from "./card-buttons"
 
-export interface ProButton {
+export type ButtonAction = CardButtonType
+
+/** Editor-only button: the canonical CardButton plus a React key. */
+export interface ProButton extends CardButton {
   id: string
-  type: ButtonAction
-  title: string
-  url?: string
-  payload?: string
 }
 
 export interface QuickReplyOption {
@@ -26,8 +25,12 @@ export interface ResponseContent {
   card?: {
     title: string
     subtitle?: string
+    /** Direct image URL (Meta fetches it). Not a web page. */
     image_url?: string
-    buttons: Omit<ProButton, "id">[]
+    /** Destination link — sent as the template's default_action (tap the card to open). */
+    url?: string
+    /** Canonical button list. ≤3, validated by lib/card-buttons.ts. */
+    buttons: CardButton[]
   }
   media?: MediaResponse
   quick_replies?: { title: string; payload?: string }[]

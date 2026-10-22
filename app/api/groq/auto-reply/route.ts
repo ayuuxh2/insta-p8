@@ -1,9 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { requireUser } from "@/lib/api-auth"
 
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get("userId")
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
+
+  const denied = requireUser(request, userId)
+  if (denied) return denied
 
   const supabase = await getSupabaseServerClient()
   const { data, error } = await supabase
@@ -26,6 +30,9 @@ export async function PUT(request: NextRequest) {
   const body = await request.json()
   const { userId, enabled, ai_context, groq_api_key, ai_base_url, ai_model } = body
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 })
+
+  const denied = requireUser(request, userId)
+  if (denied) return denied
 
   const supabase = await getSupabaseServerClient()
   const update: Record<string, unknown> = {}

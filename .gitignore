@@ -30,3 +30,7 @@ next-env.d.ts
 # video files (test/generated)
 *.mp4
 /washed_videos/
+
+# Extra documents for reference 
+META API DOCUMENTATION/
+docs/

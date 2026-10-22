@@ -1,18 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase-server"
+import { getSessionUserId } from "@/lib/api-auth"
 
 type Knowledge = Record<string, string>
-
-function getSessionUserId(request: NextRequest): string | null {
-    try {
-        const raw = request.cookies.get("insta_session")?.value
-        if (!raw) return null
-        const session = JSON.parse(raw) as { userId?: string }
-        return session.userId || null
-    } catch {
-        return null
-    }
-}
 
 export async function GET(request: NextRequest) {
     const sessionUserId = getSessionUserId(request)

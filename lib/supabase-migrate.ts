@@ -10,8 +10,9 @@ let _running: Promise<void> | null = null
  *
  * Auto-migration scope (lib/supabase-migrate.ts handles on every cold start):
  *   - CREATE TABLE IF NOT EXISTS
- *   - CREATE INDEX IF NOT EXISTS
+ *   - CREATE [UNIQUE] INDEX IF NOT EXISTS
  *   - CREATE EXTENSION IF NOT EXISTS
+ *   - ALTER TABLE ... ADD COLUMN IF NOT EXISTS
  *   - CREATE OR REPLACE FUNCTION (plpgsql RPCs, including $$ ... $$ bodies)
  *
  * Manual one-time setup (apply via Supabase SQL editor -- anon role required):
@@ -73,8 +74,10 @@ export async function ensureSchema(): Promise<void> {
 }
 
 /**
- * Extract CREATE TABLE / CREATE INDEX / CREATE EXTENSION / CREATE OR REPLACE
- * FUNCTION statements from schema.sql. We deliberately EXCLUDE CREATE POLICY
+ * Extract CREATE TABLE / CREATE INDEX / CREATE EXTENSION / ALTER TABLE ... ADD
+ * COLUMN / CREATE OR REPLACE FUNCTION statements from schema.sql.
+ * Each accepted form must be idempotent (IF NOT EXISTS / OR REPLACE).
+ * We deliberately EXCLUDE CREATE POLICY
  * -- policies require one-time application in the SQL editor because they
  * reference the `anon` role and the table-level ALTER TABLE ... ENABLE ROW
  * LEVEL SECURITY.
@@ -97,7 +100,10 @@ function parseSafeStatements(sql: string): string[] {
 
   for (const line of lines) {
     const trimmed = line.trim()
-    const starts = /^(CREATE\s+(TABLE|INDEX|EXTENSION)\s+IF\s+NOT\s+EXISTS|CREATE\s+OR\s+REPLACE\s+FUNCTION)/i.test(trimmed)
+    const starts =
+      /^(CREATE\s+(TABLE|INDEX|EXTENSION)\s+IF\s+NOT\s+EXISTS|CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS|ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS|CREATE\s+OR\s+REPLACE\s+FUNCTION)/i.test(
+        trimmed,
+      )
 
     if (!inStatement && starts) {
       inStatement = true
