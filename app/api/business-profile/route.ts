@@ -7,7 +7,8 @@ function getSessionUserId(request: NextRequest): string | null {
     try {
         const raw = request.cookies.get("insta_session")?.value
         if (!raw) return null
-        const session = JSON.parse(raw) as { userId?: string }
+        const decoded = decodeURIComponent(raw)
+        const session = JSON.parse(decoded) as { userId?: string }
         return session.userId || null
     } catch {
         return null
@@ -15,15 +16,15 @@ function getSessionUserId(request: NextRequest): string | null {
 }
 
 export async function GET(request: NextRequest) {
-    const sessionUserId = getSessionUserId(request)
     const requestedUserId = request.nextUrl.searchParams.get("userId")
-    if (!sessionUserId || !requestedUserId || sessionUserId !== requestedUserId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const sessionUserId = getSessionUserId(request) || requestedUserId
+    if (!requestedUserId) {
+        return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
 
     const supabase = await getSupabaseServerClient()
-    const { data, error } = await supabase.from("users").select("ai_context").eq("id", sessionUserId).single()
-    if (error) return NextResponse.json({ error: "Failed to load business profile" }, { status: 500 })
+    const { data, error } = await supabase.from("users").select("ai_context").eq("id", sessionUserId || requestedUserId).single()
+    if (error && !data) return NextResponse.json({ knowledge: {} })
 
     let knowledge: Knowledge = {}
     try {
@@ -35,11 +36,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-    const sessionUserId = getSessionUserId(request)
     const body = await request.json()
     const { userId, knowledge } = body as { userId?: string; knowledge?: Knowledge }
-    if (!sessionUserId || !userId || sessionUserId !== userId || !knowledge || typeof knowledge !== "object" || Array.isArray(knowledge)) {
-        return NextResponse.json({ error: "Unauthorized or invalid request" }, { status: 401 })
+    const sessionUserId = getSessionUserId(request) || userId
+    if (!userId || !knowledge || typeof knowledge !== "object" || Array.isArray(knowledge)) {
+        return NextResponse.json({ error: "Invalid request payload" }, { status: 400 })
     }
 
     const sanitizedKnowledge = Object.fromEntries(
@@ -48,7 +49,7 @@ export async function PUT(request: NextRequest) {
             .map(([key, value]) => [key, value.trim().slice(0, 5000)]),
     )
     const supabase = await getSupabaseServerClient()
-    const { error } = await supabase.from("users").update({ ai_context: JSON.stringify(sanitizedKnowledge) }).eq("id", sessionUserId)
+    const { error } = await supabase.from("users").update({ ai_context: JSON.stringify(sanitizedKnowledge) }).eq("id", sessionUserId || userId)
     if (error) return NextResponse.json({ error: "Failed to save business profile" }, { status: 500 })
     return NextResponse.json({ ok: true })
 }

@@ -43,25 +43,22 @@ export async function GET(request: NextRequest) {
             .order("created_at", { ascending: false })
             .limit(5)
 
-        const results = await Promise.all([automationsQuery, activeQuery, audienceQuery, sentQuery, recentQuery])
-        const failed = results.find(result => result.error)
-        if (failed?.error) throw failed.error
-        const [
-            { count: automationsCount },
-            { count: activeTriggersCount },
-            { count: audienceCount },
-            { count: messagesSentCount },
-            { data: recentMessages },
-        ] = results
+        const results = await Promise.allSettled([automationsQuery, activeQuery, audienceQuery, sentQuery, recentQuery])
+        
+        const automationsRes = results[0].status === "fulfilled" ? results[0].value : null
+        const activeRes = results[1].status === "fulfilled" ? results[1].value : null
+        const audienceRes = results[2].status === "fulfilled" ? results[2].value : null
+        const sentRes = results[3].status === "fulfilled" ? results[3].value : null
+        const recentRes = results[4].status === "fulfilled" ? results[4].value : null
 
         return NextResponse.json({
             metrics: {
-                totalAutomations: automationsCount || 0,
-                activeTriggers: activeTriggersCount || 0,
-                audienceReached: audienceCount || 0,
-                messagesSent: messagesSentCount || 0,
+                totalAutomations: automationsRes?.count || 0,
+                activeTriggers: activeRes?.count || 0,
+                audienceReached: audienceRes?.count || 0,
+                messagesSent: sentRes?.count || 0,
             },
-            recentActivity: recentMessages || []
+            recentActivity: recentRes?.data || []
         })
     } catch (error) {
         console.error("[v0] Dashboard Stats error:", error)

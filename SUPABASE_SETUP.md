@@ -95,9 +95,9 @@ Put these in `.env.local` (development) or your Vercel project settings
 (production):
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...           # safe to expose to the browser
-SUPABASE_SERVICE_ROLE_KEY=eyJ...                # server-only; bypasses RLS
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=eyJ...           # safe to expose / anon key
+SUPABASE_SERVICE_ROLE_KEY=eyJ...   # server-only; bypasses RLS
 ```
 
 > ⚠️  Never expose `SUPABASE_SERVICE_ROLE_KEY` to the client. The server-side

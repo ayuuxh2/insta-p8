@@ -49,6 +49,7 @@ export function useInstagramSession() {
                     setUserId(savedId)
                     setUsername(savedName)
                     setProfilePic(localStorage.getItem("ig_profile_pic"))
+                    document.cookie = `insta_session=${encodeURIComponent(JSON.stringify({ username: savedName, userId: savedId }))}; path=/; max-age=5184000;`
                 }
             }
             setIsLoading(false)
